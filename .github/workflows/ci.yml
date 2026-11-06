@@ -4,11 +4,14 @@ on:
   push:
     branches:
       - main
-      - feat-sre-harness-v1
   pull_request:
     branches:
       - main
       - feat-sre-harness-v1
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
