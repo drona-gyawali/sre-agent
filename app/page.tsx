@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type HealthStatus = "up" | "down" | "disabled";
 
@@ -59,66 +61,68 @@ function formatValue(value: unknown): string {
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
 
-function ActivityIcon({ className = "h-5 w-5" }: { className?: string }) {
+type IconProps = { className?: string; style?: CSSProperties };
+
+function ActivityIcon({ className = "h-5 w-5", style }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
     </svg>
   );
 }
 
-function PlayIcon({ className = "h-4 w-4" }: { className?: string }) {
+function PlayIcon({ className = "h-4 w-4", style }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M8 5v14l11-7z" />
     </svg>
   );
 }
 
-function CheckIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+function CheckIcon({ className = "h-3.5 w-3.5", style }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M20 6L9 17l-5-5" />
     </svg>
   );
 }
 
-function AlertIcon({ className = "h-4 w-4" }: { className?: string }) {
+function AlertIcon({ className = "h-4 w-4", style }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
       <path d="M12 9v4" /><path d="M12 17h.01" />
     </svg>
   );
 }
 
-function RefreshIcon({ className = "h-4 w-4" }: { className?: string }) {
+function RefreshIcon({ className = "h-4 w-4", style }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
     </svg>
   );
 }
 
-function CopyIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+function CopyIcon({ className = "h-3.5 w-3.5", style }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
     </svg>
   );
 }
 
-function ShieldIcon({ className = "h-4 w-4" }: { className?: string }) {
+function ShieldIcon({ className = "h-4 w-4", style }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   );
 }
 
-function DatabaseIcon({ className = "h-4 w-4" }: { className?: string }) {
+function DatabaseIcon({ className = "h-4 w-4", style }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
     </svg>
   );
@@ -165,7 +169,7 @@ export default function DiagnosePage() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [loadingHealth, setLoadingHealth] = useState(false);
+  const [loadingHealth, setLoadingHealth] = useState(true);
   const [activeTab, setActiveTab] = useState<"timeline" | "sources" | "report">("timeline");
 
   async function loadHealth() {
@@ -183,7 +187,6 @@ export default function DiagnosePage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoadingHealth(true);
     fetch("/api/health", { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(); return r.json() as Promise<HealthResponse>; })
       .then((b) => { if (!cancelled) setHealth(b); })
@@ -306,6 +309,31 @@ export default function DiagnosePage() {
         @keyframes spin { to { transform: rotate(360deg); } }
         .fadeIn { animation: fadeIn 0.18s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+        .report-md { padding: 18px 20px; max-height: 60vh; overflow: auto; font-size: 13.5px; line-height: 1.75; color: var(--text); }
+        .report-md > *:first-child { margin-top: 0; }
+        .report-md > *:last-child { margin-bottom: 0; }
+        .report-md h1, .report-md h2, .report-md h3, .report-md h4 { color: var(--text); font-weight: 600; line-height: 1.35; margin: 1.4em 0 0.6em; letter-spacing: -0.01em; }
+        .report-md h1 { font-size: 20px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+        .report-md h2 { font-size: 17px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+        .report-md h3 { font-size: 15px; }
+        .report-md h4 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted2); }
+        .report-md p { margin: 0 0 0.9em; }
+        .report-md ul, .report-md ol { margin: 0 0 0.9em; padding-left: 1.4em; }
+        .report-md li { margin: 0.25em 0; }
+        .report-md li > ul, .report-md li > ol { margin: 0.25em 0; }
+        .report-md strong { color: #fff; font-weight: 600; }
+        .report-md em { color: var(--muted2); }
+        .report-md a { color: #818CF8; text-decoration: underline; text-underline-offset: 2px; }
+        .report-md code { font-family: 'JetBrains Mono', monospace; font-size: 0.9em; background: #ffffff0d; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+        .report-md pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 0 0 1em; }
+        .report-md pre code { background: none; border: none; padding: 0; font-size: 12.5px; line-height: 1.65; }
+        .report-md blockquote { border-left: 2px solid var(--indigo); background: #6366F10d; margin: 0 0 1em; padding: 8px 14px; color: var(--muted2); }
+        .report-md hr { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
+        .report-md table { width: 100%; border-collapse: collapse; margin: 0 0 1em; font-size: 12.5px; display: block; overflow-x: auto; }
+        .report-md th { text-align: left; font-weight: 600; color: var(--muted2); background: var(--surface2); }
+        .report-md th, .report-md td { border: 1px solid var(--border); padding: 7px 10px; vertical-align: top; }
+        .report-md tr:nth-child(even) td { background: #ffffff04; }
+        .report-md input[type="checkbox"] { accent-color: var(--indigo); margin-right: 6px; }
       `}</style>
 
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -429,32 +457,54 @@ export default function DiagnosePage() {
                   <div style={{ marginTop: 8 }}>No datasources configured</div>
                 </div>
               )}
-              {health?.sources.map((src) => (
-                <div key={src.id} className="fadeIn" style={{
-                  background: "var(--surface2)", borderRadius: 10,
-                  border: "1px solid var(--border)",
-                  padding: "10px 12px",
-                  borderLeft: `2px solid ${src.status === "up" ? "var(--emerald)" : src.status === "down" ? "var(--red)" : "var(--muted)"}`,
-                }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {src.name}
+              {health?.sources.map((src) => {
+                const detail = src.status === "down"
+                  ? src.detail
+                  : src.status === "disabled"
+                    ? "Enable this source in .env to include it in investigations"
+                    : null;
+                const showLatency = src.status === "up" && src.latencyMs > 0;
+                return (
+                  <div key={src.id} className="fadeIn" style={{
+                    background: "var(--surface2)", borderRadius: 10,
+                    border: "1px solid var(--border)",
+                    padding: "10px 12px",
+                    borderLeft: `2px solid ${src.status === "up" ? "var(--emerald)" : src.status === "down" ? "var(--red)" : "var(--muted)"}`,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {src.name}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                          {src.category} · {src.type}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
-                        {src.category} · {src.type}
-                      </div>
+                      <StatusDot status={src.status} />
                     </div>
-                    <StatusDot status={src.status} />
+                    {(detail || showLatency) && (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: detail ? "space-between" : "flex-end", gap: 8, marginTop: 7 }}>
+                        <span style={{
+                          fontSize: 11, lineHeight: 1.5, minWidth: 0,
+                          color: src.status === "down" ? "#FCA5A5" : "var(--muted)",
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          {detail}
+                        </span>
+                        {showLatency && (
+                          <span className="mono" style={{
+                            fontSize: 10, color: "var(--emerald)", background: "#10B98112",
+                            border: "1px solid #10B98128", borderRadius: 999,
+                            padding: "1px 7px", flexShrink: 0,
+                          }}>
+                            {src.latencyMs}ms
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6, lineHeight: 1.5 }}>{src.detail}</div>
-                  {src.enabled && (
-                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }} className="mono">
-                      {src.latencyMs}ms
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Divider */}
@@ -773,9 +823,9 @@ export default function DiagnosePage() {
                         {copied ? "Copied" : "Copy"}
                       </button>
                     </div>
-                    <pre style={{ padding: "16px", maxHeight: "60vh", overflow: "auto", fontSize: 13, lineHeight: 1.75, color: "var(--text)", whiteSpace: "pre-wrap", wordBreak: "break-words", fontFamily: "inherit" }}>
-                      {report}
-                    </pre>
+                    <div className="report-md">
+                      <Markdown remarkPlugins={[remarkGfm]}>{report}</Markdown>
+                    </div>
                   </div>
                 )}
               </div>

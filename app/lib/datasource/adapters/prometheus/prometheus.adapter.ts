@@ -116,13 +116,26 @@ function buildQueryArguments(
 export class PrometheusAdapter implements DataSourceAdapter {
   readonly type = "prometheus" as const;
 
+  private async discoverMetricNames(
+    source: DataSourceConfig,
+    executeTool: ToolExecutor
+  ): Promise<readonly string[]> {
+    if (!source.tools.discover) {
+      return [];
+    }
+
+    try {
+      return parseMetricNames(await executeTool(source.tools.discover, {}));
+    } catch {
+      return [];
+    }
+  }
+
   async discover(
     source: DataSourceConfig,
     executeTool: ToolExecutor
   ): Promise<DiscoveryResult> {
-    const metrics = source.tools.discover
-      ? parseMetricNames(await executeTool(source.tools.discover, {}))
-      : [];
+    const metrics = await this.discoverMetricNames(source, executeTool);
 
     return {
       sourceId: source.id,
@@ -142,6 +155,7 @@ export class PrometheusAdapter implements DataSourceAdapter {
     const discovery = await this.discover(source, executeTool);
     const { text } = await generateText({
       model: getModel(model),
+      temperature: 0,
       prompt: buildQueryPrompt(source, discovery.metrics ?? [], params),
     });
     const promql = cleanGeneratedQuery(text);

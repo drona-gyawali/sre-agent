@@ -109,6 +109,16 @@ describe("PrometheusAdapter.discover", () => {
     expect(result.metrics).toEqual([]);
     expect(executeTool).not.toHaveBeenCalled();
   });
+
+  it("returns no metrics when the discovery tool is unavailable", async () => {
+    const executeTool = vi.fn<ToolExecutor>(async (toolName) => {
+      throw new Error(`Unknown MCP tool "${toolName}"`);
+    });
+
+    const result = await adapter.discover(source, executeTool);
+
+    expect(result.metrics).toEqual([]);
+  });
 });
 
 describe("PrometheusAdapter.query", () => {

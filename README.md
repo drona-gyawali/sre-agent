@@ -199,6 +199,32 @@ Open:
 http://localhost:3000
 ```
 
+### Optional: local PostgreSQL and Prometheus
+
+A Docker Compose stack and helper script are included:
+
+```bash
+./service.sh          # start PostgreSQL and Prometheus
+./service.sh test     # start and load demo data (recommended for first run)
+```
+
+Then enable the sources in `.env`:
+
+```bash
+POSTGRES_URL=postgresql://sre_agent:sre_agent@localhost:55433/sre_agent
+PROMETHEUS_URL=http://localhost:19092
+ENABLE_POSTGRES=true
+ENABLE_PROMETHEUS=true
+```
+
+Or write these keys automatically (other `.env` values are preserved):
+
+```bash
+./service.sh env --write
+```
+
+See [docs/usage.md](docs/usage.md) for the sample GitHub issue, where to paste it in the UI, seeded data, and troubleshooting.
+
 ### Run a diagnostic
 
 Enter an incident description that includes a GitHub issue number and repository:

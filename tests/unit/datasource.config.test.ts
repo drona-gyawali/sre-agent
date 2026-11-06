@@ -120,14 +120,15 @@ describe("loadDataSources", () => {
       enabled: true,
     });
     expect(sources.postgres?.tools.listTables).toBeUndefined();
+    expect(sources.postgres?.tools.query).toBe("postgres_query");
     expect(sources.metrics).toMatchObject({
       type: "prometheus",
       category: "metrics",
       enabled: true,
       tools: {
-        query: "prom_query",
-        rangeQuery: "prom_range",
-        discover: "prom_discover",
+        query: "metrics_prom_query",
+        rangeQuery: "metrics_prom_range",
+        discover: "metrics_prom_discover",
       },
     });
     expect(sources.metrics?.connection).toBeUndefined();

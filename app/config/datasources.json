@@ -28,7 +28,7 @@
     "type": "postgres",
     "category": "database",
     "package": "@modelcontextprotocol/server-postgres",
-    "mcp_tool": "query",
+    "mcp_tool": "postgres_query",
     "env": {},
     "connection": "${POSTGRES_URL}",
     "enabled": "${ENABLE_POSTGRES:-false}"
@@ -38,9 +38,9 @@
     "type": "prometheus",
     "category": "metrics",
     "package": "prometheus-mcp-server",
-    "mcp_tool": "prom_query",
-    "range_tool": "prom_range",
-    "discover_tool": "prom_discover",
+    "mcp_tool": "metrics_prom_query",
+    "range_tool": "metrics_prom_range",
+    "discover_tool": "metrics_prom_discover",
     "env": {
       "PROMETHEUS_URL": "${PROMETHEUS_URL}"
     },

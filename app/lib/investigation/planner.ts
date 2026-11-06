@@ -79,7 +79,10 @@ ${enabledSources.map(formatSource).join("\n")}
 
 Rules:
 - Use only the exact source ids listed above.
-- Select only sources that are relevant to the incident.
+- Prefer including a source over omitting it; a missing source can hide the root cause.
+- Select every source that could plausibly contain one of the identifiers.
+- If multiple sources share a category (for example two databases), include all of them unless the incident clearly names only one engine.
+- Database, logs, and metrics evidence are complementary; include all that could explain the incident.
 - Do not invent sources.
 - Return JSON only in this shape: {"sources":["source-id"]}`;
 }
@@ -107,6 +110,7 @@ export class LlmInvestigationPlanner implements InvestigationPlanner {
     try {
       const { text } = await generateText({
         model: getModel(this.model),
+        temperature: 0,
         prompt: buildSelectionPrompt(input, enabled),
       });
       selectedIds = readSelectedIds(text);

@@ -126,7 +126,14 @@ ${formatSourceResultsForPrompt(state.sourceResults ?? {})}
 Use only the evidence above. Treat each source result as evidence and name its source.
 State when a datasource returned no results, failed, or was unavailable.
 Do not present hypotheses as observed evidence.
-Format: Summary | Root Cause | Evidence | Recommended Fix | Confidence (High/Medium/Low)`,
+Format the report in Markdown with these headings:
+## Summary
+## Root Cause
+## Evidence
+## Recommended Fix
+## Confidence
+Use bullet points for evidence and fenced code blocks for queries where useful.
+Confidence must be High, Medium, or Low.`,
     });
 
     return { report: text };
