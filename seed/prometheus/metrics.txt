@@ -1,0 +1,26 @@
+# HELP payment_transactions_total Total payment transactions processed by checkout.
+# TYPE payment_transactions_total counter
+payment_transactions_total{service="checkout",status="success"} 1204
+payment_transactions_total{service="checkout",status="failed"} 17
+payment_transactions_total{service="checkout",status="failed",error_code="card_declined"} 12
+payment_transactions_total{service="checkout",status="failed",error_code="timeout"} 5
+
+# HELP payment_latency_seconds Payment processing latency in seconds.
+# TYPE payment_latency_seconds gauge
+payment_latency_seconds{service="checkout",quantile="0.5"} 0.42
+payment_latency_seconds{service="checkout",quantile="0.95"} 1.62
+payment_latency_seconds{service="checkout",quantile="0.99"} 2.85
+
+# HELP checkout_errors_total Checkout errors by error code.
+# TYPE checkout_errors_total counter
+checkout_errors_total{service="checkout",code="card_declined"} 12
+checkout_errors_total{service="checkout",code="gateway_timeout"} 5
+
+# HELP queue_depth Number of pending payment jobs.
+# TYPE queue_depth gauge
+queue_depth{service="payments",queue="settlement"} 42
+
+# HELP service_up Service availability (1 = up).
+# TYPE service_up gauge
+service_up{service="checkout"} 1
+service_up{service="payments"} 1
