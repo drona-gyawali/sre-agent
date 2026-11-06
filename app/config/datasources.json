@@ -1,0 +1,49 @@
+{
+  "database": {
+    "name": "db",
+    "type": "sqlite",
+    "category": "database",
+    "package": "mcp-sqlite",
+    "mcp_tool": "db_query",
+    "schema_tool": "db_list_tables",
+    "column_tool": "db_get_table_schema",
+    "env": {},
+    "connection": "${DATABASE_PATH}",
+    "enabled": "${ENABLE_DATABASE:-true}"
+  },
+  "logs": {
+    "name": "logs",
+    "type": "sqlite",
+    "category": "logs",
+    "package": "mcp-sqlite",
+    "mcp_tool": "logs_query",
+    "schema_tool": "logs_list_tables",
+    "column_tool": "logs_get_table_schema",
+    "env": {},
+    "connection": "${LOGS_PATH}",
+    "enabled": "${ENABLE_LOGS:-true}"
+  },
+  "postgres": {
+    "name": "postgres",
+    "type": "postgres",
+    "category": "database",
+    "package": "@modelcontextprotocol/server-postgres",
+    "mcp_tool": "query",
+    "env": {},
+    "connection": "${POSTGRES_URL}",
+    "enabled": "${ENABLE_POSTGRES:-false}"
+  },
+  "metrics": {
+    "name": "metrics",
+    "type": "prometheus",
+    "category": "metrics",
+    "package": "prometheus-mcp-server",
+    "mcp_tool": "prom_query",
+    "range_tool": "prom_range",
+    "discover_tool": "prom_discover",
+    "env": {
+      "PROMETHEUS_URL": "${PROMETHEUS_URL}"
+    },
+    "enabled": "${ENABLE_PROMETHEUS:-false}"
+  }
+}

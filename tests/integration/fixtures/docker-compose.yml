@@ -1,0 +1,35 @@
+name: sre-agent-integration
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sre_agent
+      POSTGRES_USER: sre_agent
+      POSTGRES_PASSWORD: sre_agent
+    ports:
+      - "55432:5432"
+    volumes:
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sre_agent -d sre_agent"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  pushgateway:
+    image: prom/pushgateway:v1.11.1
+    ports:
+      - "19091:9091"
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    ports:
+      - "19090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - pushgateway
