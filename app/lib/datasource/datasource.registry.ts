@@ -1,5 +1,6 @@
 import { DataSourceConfigError } from "../mcp/mcp.errors";
 import { PrometheusAdapter } from "./adapters/prometheus/prometheus.adapter";
+import { SentryAdapter } from "./adapters/sentry/sentry.adapter";
 import {
   SqlAdapter,
   POSTGRES_DIALECT,
@@ -47,5 +48,6 @@ export function createDefaultDataSourceRegistry(): DataSourceRegistry {
   return new DataSourceRegistry()
     .register(new SqlAdapter(SQLITE_DIALECT))
     .register(new SqlAdapter(POSTGRES_DIALECT))
-    .register(new PrometheusAdapter());
+    .register(new PrometheusAdapter())
+    .register(new SentryAdapter());
 }

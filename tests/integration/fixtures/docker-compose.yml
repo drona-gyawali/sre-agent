@@ -33,3 +33,23 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:
       - pushgateway
+
+  sentry-mock:
+    image: node:22-alpine
+    command: ["node", "/app/server.mjs"]
+    environment:
+      PORT: "8080"
+      SENTRY_AUTH_TOKEN: "sntryu_integration"
+    ports:
+      - "19094:8080"
+    volumes:
+      - ./sentry-mock-server.mjs:/app/server.mjs:ro
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 1s
+      timeout: 3s
+      retries: 30

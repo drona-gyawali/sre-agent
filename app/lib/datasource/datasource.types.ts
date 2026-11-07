@@ -41,6 +41,7 @@ export interface DiscoveryResult {
   readonly category: SourceCategory;
   readonly tables: readonly DiscoveryTable[];
   readonly metrics?: readonly string[];
+  readonly projects?: readonly string[];
 }
 
 export interface SourceResult {

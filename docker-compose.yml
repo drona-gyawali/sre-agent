@@ -36,6 +36,28 @@ services:
     depends_on:
       - pushgateway
 
+  sentry:
+    image: node:22-alpine
+    command: ["node", "/app/server.mjs"]
+    environment:
+      PORT: "8080"
+      SENTRY_AUTH_TOKEN: "sntryu_local_dev"
+      SENTRY_SEED_FILE: "/seed/data.json"
+    ports:
+      - "19095:8080"
+    volumes:
+      - ./deploy/sentry/sentry-mock-server.mjs:/app/server.mjs:ro
+      - ./seed/sentry:/seed:ro
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
 volumes:
   sre-agent-postgres-data:
   sre-agent-prometheus-data:

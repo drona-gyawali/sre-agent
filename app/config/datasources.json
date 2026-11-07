@@ -45,5 +45,20 @@
       "PROMETHEUS_URL": "${PROMETHEUS_URL}"
     },
     "enabled": "${ENABLE_PROMETHEUS:-false}"
+  },
+  "sentry": {
+    "name": "sentry",
+    "type": "sentry",
+    "category": "error_tracking",
+    "package": "@sentry/mcp-server",
+    "mcp_tool": "sentry_search_issues",
+    "discover_tool": "sentry_find_projects",
+    "env": {
+      "SENTRY_AUTH_TOKEN": "${SENTRY_AUTH_TOKEN}",
+      "SENTRY_ORG": "${SENTRY_ORG}",
+      "SENTRY_PROJECT": "${SENTRY_PROJECT:-}",
+      "SENTRY_HOST": "${SENTRY_HOST:-https://sentry.io}"
+    },
+    "enabled": "${ENABLE_SENTRY:-false}"
   }
 }

@@ -93,6 +93,40 @@ describe("buildMcpServerConfigs", () => {
     });
   });
 
+  it("passes Sentry authentication and host environment variables", () => {
+    const configs = buildMcpServerConfigs(
+      source("sentry", {
+        type: "sentry",
+        category: "error_tracking",
+        package: "@sentry/mcp-server",
+        tools: {
+          query: "sentry_search_issues",
+          discover: "sentry_find_projects",
+        },
+        connection: undefined,
+        env: {
+          SENTRY_AUTH_TOKEN: "sntryu_test",
+          SENTRY_ORG: "acme",
+          SENTRY_PROJECT: "payments",
+          SENTRY_HOST: "https://sentry.example.com",
+        },
+      }),
+      { includeGithub: false }
+    );
+
+    expect(configs[0]).toMatchObject({
+      name: "sentry-client",
+      prefix: "sentry",
+      args: ["-y", "@sentry/mcp-server"],
+      env: {
+        SENTRY_AUTH_TOKEN: "sntryu_test",
+        SENTRY_ORG: "acme",
+        SENTRY_PROJECT: "payments",
+        SENTRY_HOST: "https://sentry.example.com",
+      },
+    });
+  });
+
   it("skips disabled datasources", () => {
     const configs = buildMcpServerConfigs(source("db", { enabled: false }), {
       includeGithub: false,

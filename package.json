@@ -39,6 +39,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/server-postgres": "^0.6.2",
+    "@sentry/mcp-server": "^0.49.0",
     "@tailwindcss/turbopack": "^4",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20",
