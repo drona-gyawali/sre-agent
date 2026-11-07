@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { PrometheusAdapter } from "@/app/lib/datasource/adapters/prometheus/prometheus.adapter";
+import { SentryAdapter } from "@/app/lib/datasource/adapters/sentry/sentry.adapter";
 import {
   POSTGRES_DIALECT,
   SqlAdapter,
@@ -52,13 +53,14 @@ describe("DataSourceRegistry", () => {
     );
   });
 
-  it("provides a default registry for SQLite, PostgreSQL, and Prometheus", () => {
+  it("provides a default registry for SQLite, PostgreSQL, Prometheus, and Sentry", () => {
     const registry = createDefaultDataSourceRegistry();
 
     expect(registry.registeredTypes).toEqual([
       "sqlite",
       "postgres",
       "prometheus",
+      "sentry",
     ]);
     expect(registry.resolve("sqlite")).toBeInstanceOf(SqlAdapter);
     expect(registry.resolve("sqlite").type).toBe("sqlite");
@@ -66,6 +68,8 @@ describe("DataSourceRegistry", () => {
     expect(registry.resolve("postgres").type).toBe(POSTGRES_DIALECT.type);
     expect(registry.resolve("prometheus")).toBeInstanceOf(PrometheusAdapter);
     expect(registry.resolve("prometheus").type).toBe("prometheus");
+    expect(registry.resolve("sentry")).toBeInstanceOf(SentryAdapter);
+    expect(registry.resolve("sentry").type).toBe("sentry");
     expect(() => registry.resolve("loki")).toThrowError(/loki/);
   });
 

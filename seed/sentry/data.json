@@ -1,0 +1,134 @@
+{
+  "organization": {
+    "id": "1",
+    "slug": "acme",
+    "name": "Acme",
+    "dateCreated": "2024-01-01T00:00:00.000Z"
+  },
+  "projects": [
+    {
+      "id": "1",
+      "slug": "payments",
+      "name": "Payments",
+      "platform": "node",
+      "dateCreated": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "2",
+      "slug": "checkout",
+      "name": "Checkout",
+      "platform": "node",
+      "dateCreated": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "issues": [
+    {
+      "id": "1001",
+      "shortId": "PAY-1",
+      "title": "CardDeclinedError: payment failed for customer C-1001",
+      "culprit": "checkout.submit",
+      "status": "unresolved",
+      "level": "error",
+      "count": "42",
+      "userCount": 2,
+      "firstSeen": "2024-01-01T00:00:00.000Z",
+      "lastSeen": "2024-01-01T01:00:00.000Z",
+      "project": {
+        "id": "1",
+        "slug": "payments",
+        "name": "Payments"
+      },
+      "metadata": {
+        "value": "card_declined"
+      },
+      "tags": {
+        "service": "checkout",
+        "environment": "production",
+        "error_code": "card_declined",
+        "transaction_id": "TXN-9988"
+      },
+      "permalink": "http://localhost:19095/organizations/acme/issues/PAY-1/"
+    },
+    {
+      "id": "1002",
+      "shortId": "PAY-2",
+      "title": "PaymentGatewayTimeout: settlement timed out for customer C-1002",
+      "culprit": "payments.settle",
+      "status": "unresolved",
+      "level": "error",
+      "count": "7",
+      "userCount": 1,
+      "firstSeen": "2024-01-01T00:10:00.000Z",
+      "lastSeen": "2024-01-01T01:10:00.000Z",
+      "project": {
+        "id": "1",
+        "slug": "payments",
+        "name": "Payments"
+      },
+      "metadata": {
+        "value": "gateway_timeout"
+      },
+      "tags": {
+        "service": "payments",
+        "environment": "production",
+        "error_code": "gateway_timeout",
+        "transaction_id": "TXN-9991"
+      },
+      "permalink": "http://localhost:19095/organizations/acme/issues/PAY-2/"
+    },
+    {
+      "id": "1003",
+      "shortId": "CHK-1",
+      "title": "CheckoutHTTP500: checkout returned 500 for session S-42",
+      "culprit": "checkout.render",
+      "status": "unresolved",
+      "level": "error",
+      "count": "19",
+      "userCount": 5,
+      "firstSeen": "2024-01-01T00:20:00.000Z",
+      "lastSeen": "2024-01-01T01:20:00.000Z",
+      "project": {
+        "id": "2",
+        "slug": "checkout",
+        "name": "Checkout"
+      },
+      "metadata": {
+        "value": "500"
+      },
+      "tags": {
+        "service": "checkout",
+        "environment": "production",
+        "status_code": "500",
+        "session_id": "S-42"
+      },
+      "permalink": "http://localhost:19095/organizations/acme/issues/CHK-1/"
+    },
+    {
+      "id": "1004",
+      "shortId": "PAY-0",
+      "title": "CardDeclinedError: resolved payment failure for customer C-1001",
+      "culprit": "checkout.submit",
+      "status": "resolved",
+      "level": "error",
+      "count": "3",
+      "userCount": 1,
+      "firstSeen": "2023-12-31T20:00:00.000Z",
+      "lastSeen": "2023-12-31T21:00:00.000Z",
+      "project": {
+        "id": "1",
+        "slug": "payments",
+        "name": "Payments"
+      },
+      "metadata": {
+        "value": "card_declined"
+      },
+      "tags": {
+        "service": "checkout",
+        "environment": "production",
+        "error_code": "card_declined",
+        "transaction_id": "TXN-9988"
+      },
+      "permalink": "http://localhost:19095/organizations/acme/issues/PAY-0/"
+    }
+  ]
+}

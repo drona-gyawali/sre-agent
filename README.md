@@ -1,265 +1,393 @@
 # SRE Diagnostic Agent
 
-SRE Diagnostic Agent is a Next.js and LangGraph application for investigating production incidents by combining GitHub issue context, database records, logs, and metrics. It dynamically selects relevant data sources, generates read-only SQL and PromQL through an LLM, executes those queries through MCP adapters, and produces an evidence-backed diagnostic report.
+SRE Diagnostic Agent is a Next.js, LangGraph, and MCP-based application for investigating production incidents. It reads a GitHub issue, extracts real-world identifiers from noisy incident text, selects relevant observability sources, generates read-only queries, executes them concurrently, and produces an evidence-backed diagnostic report.
 
-## Why this project exists
+It is designed for the messy parts of incident response: incomplete IDs, multiple services, ambiguous symptoms, conflicting evidence, unavailable datasources, and reports that need to distinguish observed facts from hypotheses.
 
-Incident investigation usually requires jumping between multiple systems:
+## What it can do
 
-1. Read the GitHub issue and identify the customer, transaction, service, environment, or error code.
-2. Search database records for affected entities.
-3. Search logs for errors, retries, and related stack traces.
-4. Query metrics for error rate, latency, saturation, or availability changes.
-5. Reconcile the evidence into a root-cause hypothesis.
+- Fetch incident context from a GitHub issue through the GitHub MCP server.
+- Extract structured identifiers from free-form incident text:
+  - customer, user, account, tenant, order, payment, and session IDs
+  - request, trace, span, transaction, and correlation IDs
+  - service, environment, region, cluster, pod, host, release, and version
+  - error code, exception type, status code, route, symptom, and time window
+- Select the relevant enabled datasources with an LLM planner.
+- Query multiple sources concurrently with bounded parallelism.
+- Generate and execute read-only:
+  - SQL for SQLite and PostgreSQL
+  - PromQL for Prometheus
+  - issue-search queries for Sentry
+- Search grouped Sentry issues through the real `@sentry/mcp-server`.
+- Preserve failures per source so one unavailable system does not block the rest.
+- Produce a Markdown report with:
+  - Summary
+  - Root Cause
+  - Evidence
+  - Evidence Gaps
+  - Recommended Fix
+  - Confidence
+- Expose `GET /api/health` for datasource health and a dashboard for enabled/up/down visibility.
+- Run against a local Docker stack for development or real external services in production.
 
-Doing that manually is slow and can miss low-volume evidence. SRE Diagnostic Agent automates the repetitive parts while keeping the source evidence visible:
-
-- Fetches GitHub issue context through MCP.
-- Extracts identifiers from the incident description.
-- Uses an LLM planner to select only relevant enabled sources.
-- Queries sources concurrently with bounded parallelism.
-- Normalizes success, partial success, and failure into `SourceResult` records.
-- Generates a diagnostic report from observed evidence, not speculation alone.
-- Provides a datasource health endpoint for enabled/up/down visibility.
-
-The architecture is intentionally extensible. Adding another datasource should require a config entry and adapter implementation, not new LangGraph node topology.
-
-## System overview
+## Architecture
 
 ```text
-React UI
+Browser UI
   |
   v
 POST /api/diagnose (SSE)
   |
   v
-LangGraph diagnostic workflow
+LangGraph workflow
   fetch_issue -> extract_identifiers -> investigate_sources -> generate_report
        |                  |                     |                       |
-       |                  |                     v                       v
-       |                  |              LlmInvestigationPlanner    Report formatter
-       |                  |                     |
-       v                  v                     v
-   GitHub MCP          Gemini model       DataSourceService
-                                                |
-                                                v
+       v                  v                     v                       v
+   GitHub MCP        Gemini model        LlmInvestigationPlanner    Report model
+                                                  |
+                                                  v
+                                          DataSourceService
+                                                  |
+                                                  v
                                     Registry -> Adapter -> MCP session
 ```
 
-`GET /api/health` is a separate operational endpoint. It does not run a diagnostic; it checks configured sources and reports whether each is enabled, up, down, or disabled.
+Supported adapters:
 
-## Diagnostic workflow
-
-1. **Fetch issue**
-   - Calls the GitHub MCP `get_issue` tool.
-   - Uses the issue number and repository supplied by the operator.
-
-2. **Extract identifiers**
-   - Passes issue text to Gemini.
-   - Extracts structured identifiers such as `customerId`, `transactionId`, `userId`, `service`, and `errorCode`.
-
-3. **Plan sources**
-   - `LlmInvestigationPlanner` receives the issue, identifiers, and enabled datasource configurations.
-   - Returns only relevant source IDs.
-   - Falls back to all enabled sources if the model response is invalid, empty, or fails after retries/cleanup.
-
-4. **Investigate sources**
-   - `DataSourceService` resolves each selected source through `DataSourceRegistry`.
-   - Sources are queried concurrently with bounded concurrency.
-   - Each source returns a normalized `SourceResult`, so one failing datasource does not prevent other evidence from being returned.
-
-5. **Generate report**
-   - The report formatter renders source name, integration type, status, duration, query, evidence, and errors.
-   - Gemini synthesizes the evidence into a report.
-
-## Current integrations
-
-| Integration | Type | Configured source | Default state | Purpose |
+| Integration | Type | Source ID | Default | Purpose |
 | --- | --- | --- | --- | --- |
-| GitHub | `github` MCP server | Built in by `buildMcpServerConfigs` | Enabled when token is configured | Fetch issue descriptions and issue context |
-| Application database | `sqlite` | `database` | Enabled by default | Query application tables through `mcp-sqlite` |
-| Log database | `sqlite` | `logs` | Enabled by default | Query log records through `mcp-sqlite` |
-| PostgreSQL | `postgres` | `postgres` | Disabled by default | Query relational database records through `@modelcontextprotocol/server-postgres` |
-| Prometheus | `prometheus` | `metrics` | Disabled by default | Discover and query runtime metrics through `prometheus-mcp-server` |
+| SQLite application DB | `sqlite` | `database` | Enabled | Query application tables through `mcp-sqlite` |
+| SQLite log DB | `sqlite` | `logs` | Enabled | Query log records through `mcp-sqlite` |
+| PostgreSQL | `postgres` | `postgres` | Disabled | Query relational records through `@modelcontextprotocol/server-postgres` |
+| Prometheus | `prometheus` | `metrics` | Disabled | Discover metrics and run PromQL through `prometheus-mcp-server` |
+| Sentry | `sentry` | `sentry` | Disabled | Search issues through `@sentry/mcp-server` |
+| GitHub | MCP server | built in | Requires token | Fetch issue descriptions |
 
-### SQLite application database
+Adding another datasource is intended to require a config entry and an adapter implementation, not a new graph topology.
 
-Configuration: `app/config/datasources.json` → `database`
+## Requirements
 
-- MCP package: `mcp-sqlite`
-- Tools: `db_query`, `db_list_tables`, `db_get_table_schema`
-- Connection source: `DATABASE_PATH`
-- Default example path: `data/database.db`
-- Schema discovery uses SQLite table and column tools.
+- Node.js 22.15 or later
+  - `@sentry/mcp-server` requires Node.js 22.15+.
+- npm
+- Docker and Docker Compose v2 for the local development stack
+- `curl` for the helper script and health checks
+- GitHub personal access token with access to the repository containing the issue
+- Google Generative AI API key
+- Optional: real Sentry credentials for live Sentry evidence
 
-### SQLite log database
+## Local development
 
-Configuration: `app/config/datasources.json` → `logs`
+The local stack starts real PostgreSQL, Prometheus, Pushgateway, and a Sentry-compatible service, then seeds demo data for all of them.
 
-- MCP package: `mcp-sqlite`
-- Tools: `logs_query`, `logs_list_tables`, `logs_get_table_schema`
-- Connection source: `LOGS_PATH`
-- Default example path: `data/logs.db`
-- Uses the same generic SQL adapter as the application database, with logs-specific tool names.
-
-### PostgreSQL
-
-Configuration: `app/config/datasources.json` → `postgres`
-
-- MCP package: `@modelcontextprotocol/server-postgres`
-- Query tool: `query`
-- Connection source: `POSTGRES_URL`
-- Default example: `postgresql://postgres:postgres@localhost:5432/postgres`
-- Disabled by default. Set `ENABLE_POSTGRES=true` in `.env` and provide a valid `POSTGRES_URL` to enable it.
-- Schema discovery uses `information_schema` queries when only the read-only `query` tool is available.
-
-### Prometheus
-
-Configuration: `app/config/datasources.json` → `metrics`
-
-- MCP package: `prometheus-mcp-server`
-- Tools: `prom_query`, `prom_range`, `prom_discover`
-- Prometheus URL: `PROMETHEUS_URL`
-- Default example: `http://localhost:9090`
-- Disabled by default. Set `ENABLE_PROMETHEUS=true` in `.env` and provide a valid `PROMETHEUS_URL` to enable it.
-- Metric discovery returns metric names.
-- Queries prefer range queries when `range_tool` is configured, using the configured time range and step.
-
-### GitHub
-
-GitHub is wired through `app/lib/mcp/mcp-servers.ts` and is not represented as a datasource in `app/config/datasources.json`.
-
-- MCP package: `@modelcontextprotocol/server-github`
-- Tool used by the graph: `get_issue`
-- Token: `GITHUB_PERSONAL_ACCESS_TOKEN`
-- The diagnostic endpoint requires a GitHub issue number and repository in the operator prompt.
-
-## Environment variables
-
-Copy `.env.example` to `.env` and fill in local values:
+### 1. Install dependencies
 
 ```bash
-GITHUB_PERSONAL_ACCESS_TOKEN=
-GOOGLE_GENERATIVE_AI_API_KEY=
-
-DATABASE_PATH=data/database.db
-LOGS_PATH=data/logs.db
-POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/postgres
-PROMETHEUS_URL=http://localhost:9090
-
-ENABLE_POSTGRES=false
-ENABLE_PROMETHEUS=false
-ENABLE_DATABASE=true
-ENABLE_LOGS=true
+npm ci
 ```
 
-Environment behavior:
-
-- `GITHUB_PERSONAL_ACCESS_TOKEN` is required to create the GitHub MCP server.
-- `GOOGLE_GENERATIVE_AI_API_KEY` is required for identifier extraction, planning, query generation, and report generation.
-- `DATABASE_PATH` and `LOGS_PATH` may be relative to the project root or absolute paths.
-- `ENABLE_DATABASE` and `ENABLE_LOGS` default to `true` when omitted.
-- `ENABLE_POSTGRES` and `ENABLE_PROMETHEUS` default to `false` when omitted.
-- A disabled datasource does not require its connection or service env values during config loading.
-- Never commit a populated `.env` file.
-
-## Quick start
-
-### Prerequisites
-
-- Node.js
-- npm
-- Docker and Docker Compose for the optional real integration test suite
-- GitHub personal access token
-- Google Generative AI API key
-
-### Install and start locally
+### 2. Create the application environment
 
 ```bash
-npm install
 cp .env.example .env
 ```
 
-Edit `.env` and set:
+Set the two required application secrets in `.env`:
 
 ```bash
 GITHUB_PERSONAL_ACCESS_TOKEN=<your GitHub token>
 GOOGLE_GENERATIVE_AI_API_KEY=<your Gemini API key>
 ```
 
-Start the app:
+Do not commit a populated `.env`.
+
+### 3. Start the local services and load demo data
 
 ```bash
-npm run dev
+./service.sh test
 ```
 
-Open:
+This starts:
 
-```text
-http://localhost:3000
-```
+| Service | Local URL |
+| --- | --- |
+| PostgreSQL | `postgresql://sre_agent:sre_agent@localhost:55433/sre_agent` |
+| Prometheus | `http://localhost:19092` |
+| Pushgateway | `http://localhost:19093` |
+| Sentry-compatible service | `http://localhost:19095` |
 
-### Optional: local PostgreSQL and Prometheus
+It also seeds PostgreSQL tables, pushes Prometheus demo metrics, and loads Sentry demo issues.
 
-A Docker Compose stack and helper script are included:
+For subsequent starts without reseeding:
 
 ```bash
-./service.sh          # start PostgreSQL and Prometheus
-./service.sh test     # start and load demo data (recommended for first run)
+./service.sh
 ```
 
-Then enable the sources in `.env`:
+### 4. Point `.env` at the local stack
+
+Recommended:
+
+```bash
+./service.sh env --write
+```
+
+Or copy the values from [.env.sentry](.env.sentry) and add the database/metrics values manually:
 
 ```bash
 POSTGRES_URL=postgresql://sre_agent:sre_agent@localhost:55433/sre_agent
 PROMETHEUS_URL=http://localhost:19092
 ENABLE_POSTGRES=true
 ENABLE_PROMETHEUS=true
+
+SENTRY_AUTH_TOKEN=sntryu_local_dev
+SENTRY_ORG=acme
+SENTRY_PROJECT=payments
+SENTRY_HOST=http://localhost:19095
+ENABLE_SENTRY=true
 ```
 
-Or write these keys automatically (other `.env` values are preserved):
+`./service.sh env --write` overwrites any existing Sentry credentials in `.env` with the local mock values. Replace them with real credentials when you switch to real Sentry.
+
+### 5. Start the app
 
 ```bash
-./service.sh env --write
+npm run dev
 ```
 
-See [docs/usage.md](docs/usage.md) for the sample GitHub issue, where to paste it in the UI, seeded data, and troubleshooting.
+Open `http://localhost:3000`.
 
-### Run a diagnostic
+### 6. Verify the environment
 
-Enter an incident description that includes a GitHub issue number and repository:
+```bash
+curl -s http://localhost:3000/api/health | jq
+```
+
+Enabled sources should report `"status": "up"`.
+
+You can also verify the local services directly:
+
+```bash
+./service.sh status
+./service.sh psql
+./service.sh logs
+```
+
+### 7. Run a diagnosis
+
+Create or choose a GitHub issue that contains an incident description, for example:
+
+```markdown
+Title: Payment failures for customer C-1001
+
+Customer C-1001 reports checkout failures since 10:20 UTC.
+Affected transactions: TXN-9988, TXN-9989
+Error code: card_declined
+Service: checkout
+```
+
+Then paste an issue reference into the UI:
 
 ```text
-issue #1 in myorg/myrepo is causing payment failures for customer C-1001
+issue #7 in acme/incident-demo is causing payment failures for customer C-1001
 ```
 
-The UI streams these stages:
+The agent streams these stages:
 
-1. Fetching GitHub issue
-2. Extracting identifiers
-3. Investigating data sources
-4. Generating report
+1. Fetch issue
+2. Extract identifiers
+3. Plan and investigate sources
+4. Generate report
 
-### Production build
+The report is available in the Report tab. Source evidence, generated queries, failures, and durations are visible in the UI.
+
+## Local service commands
+
+| Command | Description |
+| --- | --- |
+| `./service.sh` | Start PostgreSQL, Prometheus, Pushgateway, and Sentry |
+| `./service.sh test` | Start everything and load all demo data |
+| `./service.sh seed` | Reload demo data into running services |
+| `./service.sh status` | Show container status |
+| `./service.sh logs` | Follow container logs |
+| `./service.sh psql` | Open a PostgreSQL shell |
+| `./service.sh env` | Print local-stack `.env` values |
+| `./service.sh env --write` | Write local-stack values into `.env` |
+| `./service.sh down` | Stop containers, keep volumes |
+| `./service.sh reset` | Remove containers and volumes, then reseed |
+
+## Local demo data
+
+### PostgreSQL
+
+- `customers`: `C-1001` and `C-1002`
+- `orders`: failed transactions `TXN-9988` and `TXN-9989` with `card_declined`; successful `TXN-9990` and `TXN-9991`
+- `payment_attempts`: repeated Stripe attempts with elevated latency
+
+### Prometheus
+
+- `payment_transactions_total`
+- `payment_latency_seconds`
+- `checkout_errors_total` with `error_code="card_declined"` and `error_code="gateway_timeout"`
+- `queue_depth`
+- `service_up`
+
+### Sentry
+
+The local Sentry-compatible service is seeded from `seed/sentry/data.json`:
+
+- organization `acme`
+- projects `payments` and `checkout`
+- `PAY-1`: unresolved card failure for `C-1001`
+- `PAY-2`: unresolved settlement timeout for `C-1002`
+- `CHK-1`: unresolved checkout 500 for session `S-42`
+- `PAY-0`: resolved C-1001 failure for testing `is:unresolved`
+
+This service is a Sentry-compatible API used by the real `@sentry/mcp-server`. It is not a full self-hosted Sentry deployment.
+
+## Production deployment
+
+The development Compose stack is not a production deployment. In production, point the agent at real PostgreSQL, Prometheus, and Sentry services, or disable the ones you do not use.
+
+### 1. Provision real services
+
+Recommended production setup:
+
+- Real PostgreSQL with a read-only user for the agent.
+- Real Prometheus with read access to the metrics you need.
+- Real Sentry with a read-only auth token.
+- A GitHub token that can read the target issues.
+- A Gemini API key.
+
+Use least-privilege, read-only credentials. Never use production write tokens unless the adapter requires it.
+
+### 2. Set production environment variables
+
+Set these in your platform, process manager, or secret manager. If you use a file, keep it out of Git.
 
 ```bash
-npm run build
-npm run start
+NODE_ENV=production
+PORT=3000
+
+GITHUB_PERSONAL_ACCESS_TOKEN=<read-only GitHub token>
+GOOGLE_GENERATIVE_AI_API_KEY=<Gemini key>
+
+DATABASE_PATH=/var/lib/sre-agent/database.db
+LOGS_PATH=/var/lib/sre-agent/logs.db
+
+POSTGRES_URL=postgresql://sre_readonly:password@postgres.example.com:5432/app
+PROMETHEUS_URL=https://prometheus.example.com
+SENTRY_AUTH_TOKEN=sntryu_<read-only-token>
+SENTRY_ORG=<organization-slug>
+SENTRY_PROJECT=<optional-project-slug>
+SENTRY_HOST=https://sentry.io
+
+ENABLE_DATABASE=true
+ENABLE_LOGS=true
+ENABLE_POSTGRES=true
+ENABLE_PROMETHEUS=true
+ENABLE_SENTRY=true
 ```
 
-## API usage
+Notes:
+
+- `SENTRY_AUTH_TOKEN` should have at least `org:read`, `project:read`, and `event:read`.
+- `SENTRY_PROJECT` is optional. Leave it empty to search the whole organization.
+- `SENTRY_HOST` must be the base URL only, without `/api/0`.
+- `DATABASE_PATH` and `LOGS_PATH` must be writable/persistent if SQLite sources are enabled.
+- Disable unused sources with `ENABLE_* = false`.
+
+### 3. Build and start
+
+```bash
+npm ci
+npm run build
+npm start
+```
+
+`npm start` runs the production Next.js server. Use your process manager or container platform to keep it running and restart it on failure.
+
+### 4. Put authentication and TLS in front
+
+The application does not include built-in authentication. Do not expose it directly to the public internet.
+
+At minimum, protect both endpoints with your reverse proxy or platform auth:
+
+- `POST /api/diagnose`
+- `GET /api/health`
+
+Use HTTPS, network restrictions, and authentication appropriate for your environment.
+
+### Production checklist
+
+- [ ] Node.js 22.15+ is installed.
+- [ ] `npm ci` and `npm run build` succeed.
+- [ ] Production secrets are stored outside Git.
+- [ ] Only required datasources are enabled.
+- [ ] Credentials are read-only and scoped to the minimum access needed.
+- [ ] `/api/diagnose` and `/api/health` are behind authentication.
+- [ ] TLS is terminated by a trusted reverse proxy or platform.
+- [ ] SQLite paths are on persistent storage, or SQLite sources are disabled.
+- [ ] The process has outbound network access for `npx` MCP packages and external services.
+- [ ] `/api/health` is monitored and alerted on.
+- [ ] Logs and model usage are monitored for failures and quota exhaustion.
+
+### Container deployment
+
+The repository includes `docker-compose.yml` for local development only. It does not include a production Dockerfile. If you deploy with containers, build an image that runs:
+
+```bash
+npm ci
+npm run build
+npm start
+```
+
+Expose port `3000`, inject environment variables through your platform, and configure health checks against `/api/health`.
+
+## Configuration reference
+
+### Environment variables
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `GITHUB_PERSONAL_ACCESS_TOKEN` | Yes | GitHub MCP access to fetch issues |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Yes | Gemini models for extraction, planning, query generation, and reports |
+| `DATABASE_PATH` | If `ENABLE_DATABASE=true` | SQLite application database path |
+| `LOGS_PATH` | If `ENABLE_LOGS=true` | SQLite logs database path |
+| `POSTGRES_URL` | If `ENABLE_POSTGRES=true` | PostgreSQL connection string |
+| `PROMETHEUS_URL` | If `ENABLE_PROMETHEUS=true` | Prometheus base URL |
+| `SENTRY_AUTH_TOKEN` | If `ENABLE_SENTRY=true` | Sentry read token |
+| `SENTRY_ORG` | If `ENABLE_SENTRY=true` | Sentry organization slug |
+| `SENTRY_PROJECT` | No | Optional Sentry project slug |
+| `SENTRY_HOST` | No | Sentry base URL, default `https://sentry.io` |
+| `ENABLE_DATABASE` | No | Default `true` |
+| `ENABLE_LOGS` | No | Default `true` |
+| `ENABLE_POSTGRES` | No | Default `false` |
+| `ENABLE_PROMETHEUS` | No | Default `false` |
+| `ENABLE_SENTRY` | No | Default `false` |
+| `SOURCE_INVESTIGATION_CONCURRENCY` | No | Max concurrent datasource queries |
+| `PORT` | No | Next.js production port, default `3000` |
+
+### Datasource configuration
+
+Datasources are defined in `app/config/datasources.json`. Enablement can be hard-coded or resolved from environment variables. Disabled sources do not require their connection values or credentials during config loading.
+
+## API
 
 ### `POST /api/diagnose`
 
-Accepts JSON:
+Streams the diagnostic workflow as Server-Sent Events.
 
 ```bash
-curl -i -X POST http://localhost:3000/api/diagnose \
+curl -N -X POST http://localhost:3000/api/diagnose \
   -H 'Content-Type: application/json' \
-  -d '{"message":"issue #1 in myorg/myrepo is causing payment failures for customer C-1001","model":"google:gemini-3.5-flash-lite"}'
+  -d '{
+    "message": "issue #1 in myorg/myrepo is causing payment failures for customer C-1001",
+    "model": "google:gemini-3.5-flash-lite"
+  }'
 ```
 
-The endpoint returns server-sent events:
+Example events:
 
 ```text
 data: {"node":"fetch_issue","update":{...}}
@@ -271,33 +399,35 @@ data: {"node":"done","update":{}}
 
 ### `GET /api/health`
 
-Returns the status of every configured datasource:
+Returns datasource health.
 
 ```bash
-curl -s http://localhost:3000/api/health
+curl -s http://localhost:3000/api/health | jq
 ```
 
-Response behavior:
+- `200 OK`: every enabled source is reachable.
+- `503 Service Unavailable`: at least one enabled source is down, or configuration failed.
+- `status: "ok"`: all enabled sources are up.
+- `status: "degraded"`: some enabled sources are down.
+- `status: "down"`: all enabled sources are down.
+- Disabled sources report `status: "disabled"`.
 
-- `200 OK` when every enabled source is reachable.
-- `503 Service Unavailable` when one or more enabled sources are down.
-- Disabled sources return `status: "disabled"`.
-- Enabled reachable sources return `status: "up"`.
-- Enabled unreachable sources return `status: "down"`.
-
-Check implementations:
+Health checks:
 
 - SQLite: connection file exists and is a regular file.
-- PostgreSQL: database connection and `SELECT 1`.
-- Prometheus: `/-/healthy` endpoint over HTTP.
+- PostgreSQL: connection plus `SELECT 1`.
+- Prometheus: `/-/healthy`.
+- Sentry: organization API endpoint with bearer token.
 
-## Development and tests
+## Testing
 
-Default test suite:
+Default tests:
 
 ```bash
 npm test
 ```
+
+This includes unit tests and the mocked Sentry MCP integration test. It does not need Docker, network access, or a live Sentry account.
 
 Real integration tests:
 
@@ -305,20 +435,7 @@ Real integration tests:
 npm run test:real
 ```
 
-The real suite uses Docker Compose fixtures to start:
-
-- PostgreSQL 16
-- Prometheus 3.5
-- Pushgateway
-
-It also uses the actual PostgreSQL and Prometheus MCP servers and a real Gemini API key from `.env`. It verifies:
-
-- PostgreSQL schema discovery
-- Prometheus metric discovery
-- Real SQL query execution
-- Real PromQL range query execution
-- Live datasource health checks
-- End-to-end diagnostic graph execution
+This starts Docker fixtures for PostgreSQL, Prometheus, Pushgateway, and a mock Sentry API, then exercises the real PostgreSQL, Prometheus, and Sentry MCP servers with Gemini. It requires Docker and Gemini API quota.
 
 Static checks:
 
@@ -328,48 +445,152 @@ npm run lint
 npm run build
 ```
 
+## Troubleshooting
+
+### `ENABLE_SENTRY=true` fails at startup
+
+Provide both `SENTRY_AUTH_TOKEN` and `SENTRY_ORG`. `SENTRY_PROJECT` is optional.
+
+### Sentry shows `down`
+
+Check:
+
+- token scopes
+- organization slug
+- `SENTRY_HOST` base URL
+- network access from the app process
+
+Verify manually:
+
+```bash
+curl -i -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
+  "https://sentry.io/api/0/organizations/$SENTRY_ORG/"
+```
+
+### Sentry MCP warning: `No LLM API key found`
+
+This warning comes from `@sentry/mcp-server`, not from this application.
+
+The Sentry MCP package only recognizes `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `OPENROUTER_API_KEY` for its own optional AI-powered search tools. It does not recognize Gemini.
+
+The warning is harmless because this application:
+
+1. Uses `GOOGLE_GENERATIVE_AI_API_KEY` with Gemini to generate the Sentry query.
+2. Calls Sentry's `search_issues` with direct Sentry query syntax.
+
+Sentry issue search still works.
+
+### Prometheus query returns zero or no data
+
+Check:
+
+- metric name exists
+- label names actually exist on that metric
+- the counter has enough samples for `rate()` or `increase()`
+- static Pushgateway demo values are queried directly for absolute counts
+
+Grouping by a label that does not exist silently produces no series.
+
+### PostgreSQL, Prometheus, or Sentry shows `Disabled`
+
+Set the corresponding `ENABLE_*` variable to `true` and restart the app.
+
+### `Health endpoint returns 503`
+
+At least one enabled source is unreachable. Run:
+
+```bash
+./service.sh status
+./service.sh logs
+curl -s http://localhost:3000/api/health | jq
+```
+
+### GitHub issue extraction fails
+
+The prompt must include an issue number and repository, for example:
+
+```text
+issue #7 in acme/incident-demo
+```
+
+Verify `GITHUB_PERSONAL_ACCESS_TOKEN` can read the repository.
+
+### Port conflicts
+
+The local dev stack uses:
+
+- PostgreSQL `55433`
+- Prometheus `19092`
+- Pushgateway `19093`
+- Sentry `19095`
+
+The integration test stack uses:
+
+- PostgreSQL `55432`
+- Prometheus `19090`
+- Pushgateway `19091`
+- Sentry `19094`
+
+Change ports in `docker-compose.yml` and update `.env` if needed.
+
+## Security notes
+
+- Incident text and source results are treated as untrusted data in prompts, not instructions.
+- SQL generation is constrained to read-only queries, but production credentials should still be read-only.
+- Sentry and GitHub tokens should be read-only and least-privilege.
+- The application has no built-in auth. Protect it with a reverse proxy or platform access controls.
+- Do not commit `.env` or production secrets.
+- MCP servers are launched through `npx -y`. Production environments should allow the required packages or pre-cache them.
+
 ## Project structure
 
 ```text
 app/
   api/diagnose/route.ts          SSE diagnostic endpoint
   api/health/route.ts            Datasource health endpoint
-  config/datasources.json         Datasource definitions
-  lib/agent.ts                    Agent runtime and CLI workflow setup
-  lib/graph.ts                    LangGraph workflow
-  lib/utils.ts                    Graph nodes and state
-  lib/datasource.config.ts        Datasource config schema and env handling
-  lib/datasource-health.ts        Source health checks
-  lib/datasource/                 Registry, service, types, and adapters
-  lib/investigation/              Planner and report formatter
-  lib/mcp/                        MCP session, server config, response parsing
-  page.tsx                        Diagnostic workspace UI
+  config/datasources.json        Datasource definitions
+  lib/agent.ts                   Agent runtime and MCP session setup
+  lib/graph.ts                   LangGraph workflow
+  lib/utils.ts                   Graph nodes and prompts
+  lib/datasource.config.ts       Config schema and env resolution
+  lib/datasource-health.ts       Health checks
+  lib/datasource/                Registry, service, adapters, types
+  lib/investigation/             Planner and result formatter
+  lib/mcp/                       MCP session, server config, response parsing
+  lib/prompt-guidelines.ts       Shared prompt safety and identifier rules
+  page.tsx                       Diagnostic workspace UI
 
-data/                             Local SQLite demo/runtime databases
-docs/                             Phase architecture and implementation notes
+deploy/
+  prometheus/                    Local Prometheus configuration
+  sentry/                        Local Sentry-compatible API server
+
+seed/
+  postgres/                      PostgreSQL schema and demo rows
+  prometheus/                    Prometheus demo metrics
+  sentry/                        Sentry demo organization, projects, and issues
+
+data/                            Demo SQLite databases
+docs/                            Usage and architecture documentation
 tests/
-  integration/                    Real Docker-backed integration tests
-  integration/fixtures/           Postgres seed, Prometheus config, Compose file
-  unit/                           Config, registry, adapter, health, graph tests
+  integration/                   Docker-backed integration tests and fixtures
+  unit/                          Config, adapter, graph, prompt, and seed tests
 ```
 
-## Current state and limitations
+## Limitations
 
-- SQLite database and logs are enabled by default.
-- PostgreSQL and Prometheus are disabled by default and must be enabled with `ENABLE_POSTGRES=true` or `ENABLE_PROMETHEUS=true`.
-- The PostgreSQL MCP server exposes a read-only `query` tool; schema discovery is implemented with `information_schema`.
-- Prometheus health checks use HTTP status; they do not start the MCP server.
-- The root dashboard is a non-AI SRE operational page backed by `GET /api/health`. It shows datasource health and does not include an AI model picker or streaming UI.
-- The real integration suite requires Docker, network access to pull images, and Gemini API quota.
-- The repository includes demo SQLite databases in `data/`; PostgreSQL demo data is seeded by the integration fixture SQL.
+- The local Sentry service is a Sentry-compatible mock, not a full self-hosted Sentry.
+- The local Compose stack is for development, not production.
+- The app does not include built-in authentication.
+- Query quality depends on the configured model and the quality of datasource metadata.
+- Prometheus discovery returns metric names, not full label metadata.
+- The default model is `google:gemini-3.5-flash-lite`; the registry currently exposes Google models.
+- Real integration tests require Docker, network access, and Gemini quota.
 
-## Frontend dashboard
+## Documentation
 
-The root page (`app/page.tsx`) is a clean, non-AI SRE operational dashboard. It polls `GET /api/health` and renders:
-
-- Summary cards: total sources, enabled, up, down, and disabled counts.
-- A datasource table with name, ID, type, category, enabled status, health status, detail, and latency.
-- Color-coded status chips for `up`, `down`, and `disabled`.
-- Actions: refresh health, open documentation, and run diagnosis.
-
-There is no Next.js favicon branding, AI model picker, or streaming UI on the dashboard. The diagnose endpoint remains available at `POST /api/diagnose` for the agent workflow.
+- [Usage guide](docs/usage.md)
+- [Phase 1: MCP foundation](docs/phase-1-mcp-foundation.md)
+- [Phase 2: adapter architecture](docs/phase-2-adapter-architecture.md)
+- [Phase 3: graph refactor](docs/phase-3-graph-refactor.md)
+- [Phase 4: integrations](docs/phase-4-integrations.md)
+- [Phase 5: Sentry integration](docs/phase-5-sentry-integration.md)

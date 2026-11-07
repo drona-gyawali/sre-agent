@@ -46,6 +46,26 @@ const prometheusSource: DataSourceConfig = {
   enabled: true,
 };
 
+const sentrySource: DataSourceConfig = {
+  id: "sentry",
+  name: "sentry errors",
+  type: "sentry",
+  category: "error_tracking",
+  package: "@sentry/mcp-server",
+  tools: {
+    query: "sentry_search_issues",
+    discover: "sentry_find_projects",
+  },
+  env: {
+    SENTRY_AUTH_TOKEN: "sntryu_test",
+    SENTRY_ORG: "acme",
+    SENTRY_PROJECT: "payments",
+    SENTRY_HOST: "https://sentry.example.com",
+  },
+  settings: { timeRangeMinutes: 60, stepSeconds: 60 },
+  enabled: true,
+};
+
 function toolResult(toolName: string, value: unknown): McpToolResult {
   const text = typeof value === "string" ? value : JSON.stringify(value);
   return { toolName, text, content: [{ type: "text", text }] };
@@ -104,6 +124,25 @@ function createExecutor(): ToolExecutor {
       });
     }
 
+    if (toolName === "sentry_find_projects") {
+      return toolResult(toolName, {
+        projects: [{ slug: "payments" }, { slug: "checkout" }],
+      });
+    }
+
+    if (toolName === "sentry_search_issues") {
+      return {
+        ...toolResult(toolName, {
+          query: args?.query,
+          issues: [{ shortId: "PAY-1", title: "payment failed for C-1001" }],
+        }),
+        structuredContent: {
+          query: String(args?.query),
+          issues: [{ shortId: "PAY-1", title: "payment failed for C-1001" }],
+        },
+      };
+    }
+
     throw new Error(`Unexpected tool: ${toolName}`);
   });
 }
@@ -120,7 +159,7 @@ beforeEach(() => {
   generateText.mockReset();
 });
 
-describe("PostgreSQL and Prometheus integration", () => {
+describe("PostgreSQL, Prometheus, and Sentry integration", () => {
   it("discovers the PostgreSQL schema through the default registry", async () => {
     const service = createService(createExecutor());
     const discovery = await service.discover(postgresSource);
@@ -185,6 +224,43 @@ describe("PostgreSQL and Prometheus integration", () => {
       start: expect.any(String),
       end: expect.any(String),
       step: "30s",
+    });
+  });
+
+  it("runs a Sentry investigation through the same service", async () => {
+    generateText.mockResolvedValue({ text: "C-1001 card_declined" });
+
+    const executeTool = createExecutor();
+    const service = createService(executeTool);
+    const discovery = await service.discover(sentrySource);
+
+    expect(discovery).toMatchObject({
+      sourceId: "sentry",
+      integrationType: "sentry",
+      category: "error_tracking",
+      projects: ["payments", "checkout"],
+    });
+
+    const result = await service.query(sentrySource, {
+      customerId: "C-1001",
+      errorCode: "card_declined",
+    });
+
+    expect(result).toMatchObject({
+      sourceId: "sentry",
+      integrationType: "sentry",
+      category: "error_tracking",
+      status: "success",
+      query: "C-1001 card_declined",
+      data: {
+        query: "C-1001 card_declined",
+        issues: [{ shortId: "PAY-1" }],
+      },
+    });
+    expect(executeTool).toHaveBeenCalledWith("sentry_search_issues", {
+      organizationSlug: "acme",
+      projectSlugOrId: "payments",
+      query: "C-1001 card_declined",
     });
   });
 

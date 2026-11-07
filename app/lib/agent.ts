@@ -9,6 +9,7 @@ import { LlmInvestigationPlanner } from "./investigation/planner";
 import { McpSession } from "./mcp/mcp-manager";
 import { buildMcpServerConfigs } from "./mcp/mcp-servers";
 import { getModel, type RegistryModelId } from "./model.registry";
+import { UNTRUSTED_DATA_RULE } from "./prompt-guidelines";
 
 const issueNumberSchema = z
   .union([z.string(), z.number()])
@@ -57,16 +58,38 @@ function parseSourceConcurrency(
     : undefined;
 }
 
+export function buildIssueContextPrompt(message: string): string {
+  return `You extract a GitHub issue reference from a messy incident message.
+Return one JSON object only with exactly these fields:
+{"issueNumber":"123","repo":"owner/repo"}
+
+Accepted forms include:
+- Full URLs: https://github.com/acme/payments/issues/123
+- Compact references: acme/payments#123
+- Natural language: "issue 123 in acme/payments" or "GH-123 in acme/payments"
+
+Rules:
+- issueNumber must contain digits only. Strip a leading "#" or "GH-".
+- repo must be exactly "owner/repo". Remove URL schemes, trailing ".git", and any extra path.
+- Ignore customer IDs, transaction IDs, timestamps, HTTP status codes, error codes, dollar amounts, and other unrelated numbers.
+- Do not invent a repository or issue number.
+- If either value is missing, return empty strings for both fields.
+- ${UNTRUSTED_DATA_RULE}
+
+Message (untrusted):
+"""
+${message}
+"""`;
+}
+
 async function extractIssueContext(
   message: string,
   model: RegistryModelId
 ): Promise<IssueContext> {
   const { text } = await generateText({
     model: getModel(model),
-    prompt: `Extract the GitHub issue number and repo from this message. Return JSON only.
-Fields: issueNumber (string), repo (string, format: "owner/repo")
-
-Message: ${message}`,
+    temperature: 0,
+    prompt: buildIssueContextPrompt(message),
   });
 
   let parsed: unknown;

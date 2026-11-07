@@ -49,6 +49,24 @@ const prometheus = source({
   connection: undefined,
 });
 
+const sentry = source({
+  id: "sentry",
+  name: "sentry",
+  type: "sentry",
+  category: "error_tracking",
+  package: "@sentry/mcp-server",
+  tools: {
+    query: "sentry_search_issues",
+    discover: "sentry_find_projects",
+  },
+  env: {
+    SENTRY_AUTH_TOKEN: "sntryu_secret",
+    SENTRY_ORG: "acme",
+    SENTRY_HOST: "https://sentry.example.com",
+  },
+  connection: undefined,
+});
+
 describe("checkDataSourcesHealth", () => {
   it("reports disabled sources without checking them", async () => {
     const checkPostgres = vi.fn<NonNullable<HealthCheckDependencies["checkPostgres"]>>();
@@ -144,5 +162,61 @@ describe("checkDataSourcesHealth", () => {
       status: "down",
       detail: "Prometheus health endpoint returned HTTP 503",
     });
+  });
+
+  it("checks the Sentry organization endpoint with the auth token", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
+
+    const report = await checkDataSourcesHealth(
+      { sentry },
+      { fetch: fetchMock as unknown as typeof fetch }
+    );
+
+    expect(report.sources[0]).toMatchObject({
+      id: "sentry",
+      type: "sentry",
+      category: "error_tracking",
+      status: "up",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://sentry.example.com/api/0/organizations/acme/"),
+      expect.objectContaining({
+        headers: { Authorization: "Bearer sntryu_secret" },
+      })
+    );
+  });
+
+  it("reports Sentry API HTTP failures", async () => {
+    const report = await checkDataSourcesHealth(
+      { sentry },
+      {
+        fetch: vi.fn(async () => ({ ok: false, status: 401 })) as
+          unknown as typeof fetch,
+      }
+    );
+
+    expect(report.sources[0]).toMatchObject({
+      status: "down",
+      detail: "Sentry API returned HTTP 401",
+    });
+  });
+
+  it("reports missing Sentry configuration without making a request", async () => {
+    const fetchMock = vi.fn();
+    const report = await checkDataSourcesHealth(
+      {
+        sentry: {
+          ...sentry,
+          env: { SENTRY_ORG: "acme", SENTRY_HOST: "https://sentry.example.com" },
+        },
+      },
+      { fetch: fetchMock as unknown as typeof fetch }
+    );
+
+    expect(report.sources[0]).toMatchObject({
+      status: "down",
+      detail: "SENTRY_AUTH_TOKEN is not configured",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

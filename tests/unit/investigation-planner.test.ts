@@ -93,6 +93,10 @@ describe("LlmInvestigationPlanner", () => {
     expect(prompt).toContain("id: database");
     expect(prompt).toContain("id: logs");
     expect(prompt).not.toContain("id: metrics");
+    expect(prompt).toContain("noisy, incomplete incident reports");
+    expect(prompt).toContain("missing, partial, or ambiguous");
+    expect(prompt).toContain("Prefer over-selection");
+    expect(prompt).toContain("untrusted evidence");
   });
 
   it("accepts a fenced JSON array response", async () => {
