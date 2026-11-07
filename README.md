@@ -1,36 +1,32 @@
 # SRE Diagnostic Agent
 
-SRE Diagnostic Agent is a Next.js, LangGraph, and MCP-based application for investigating production incidents. It reads a GitHub issue, extracts real-world identifiers from noisy incident text, selects relevant observability sources, generates read-only queries, executes them concurrently, and produces an evidence-backed diagnostic report.
+SRE Diagnostic Agent is a Next.js and LangGraph application for investigating production incidents by combining GitHub issue context, database records, logs, and metrics. It dynamically selects relevant data sources, generates read-only SQL and PromQL through an LLM, executes those queries through MCP adapters, and produces an evidence-backed diagnostic report.
 
-It is designed for the messy parts of incident response: incomplete IDs, multiple services, ambiguous symptoms, conflicting evidence, unavailable datasources, and reports that need to distinguish observed facts from hypotheses.
+![SRE Diagnostic Agent landing page in light mode](docs/images/landing-light.png)
 
-## What it can do
+## Why this project exists
 
-- Fetch incident context from a GitHub issue through the GitHub MCP server.
-- Extract structured identifiers from free-form incident text:
-  - customer, user, account, tenant, order, payment, and session IDs
-  - request, trace, span, transaction, and correlation IDs
-  - service, environment, region, cluster, pod, host, release, and version
-  - error code, exception type, status code, route, symptom, and time window
-- Select the relevant enabled datasources with an LLM planner.
-- Query multiple sources concurrently with bounded parallelism.
-- Generate and execute read-only:
-  - SQL for SQLite and PostgreSQL
-  - PromQL for Prometheus
-  - issue-search queries for Sentry
-- Search grouped Sentry issues through the real `@sentry/mcp-server`.
-- Preserve failures per source so one unavailable system does not block the rest.
-- Produce a Markdown report with:
-  - Summary
-  - Root Cause
-  - Evidence
-  - Evidence Gaps
-  - Recommended Fix
-  - Confidence
-- Expose `GET /api/health` for datasource health and a dashboard for enabled/up/down visibility.
-- Run against a local Docker stack for development or real external services in production.
+Incident investigation usually requires jumping between multiple systems:
 
-## Architecture
+1. Read the GitHub issue and identify the customer, transaction, service, environment, or error code.
+2. Search database records for affected entities.
+3. Search logs for errors, retries, and related stack traces.
+4. Query metrics for error rate, latency, saturation, or availability changes.
+5. Reconcile the evidence into a root-cause hypothesis.
+
+Doing that manually is slow and can miss low-volume evidence. SRE Diagnostic Agent automates the repetitive parts while keeping the source evidence visible:
+
+- Fetches GitHub issue context through MCP.
+- Extracts identifiers from the incident description.
+- Uses an LLM planner to select only relevant enabled sources.
+- Queries sources concurrently with bounded parallelism.
+- Normalizes success, partial success, and failure into `SourceResult` records.
+- Generates a diagnostic report from observed evidence, not speculation alone.
+- Provides a datasource health endpoint for enabled/up/down visibility.
+
+The architecture is intentionally extensible. Adding another datasource should require a config entry and adapter implementation, not new LangGraph node topology.
+
+## System overview
 
 ```text
 Browser UI
@@ -548,49 +544,44 @@ Change ports in `docker-compose.yml` and update `.env` if needed.
 app/
   api/diagnose/route.ts          SSE diagnostic endpoint
   api/health/route.ts            Datasource health endpoint
-  config/datasources.json        Datasource definitions
-  lib/agent.ts                   Agent runtime and MCP session setup
-  lib/graph.ts                   LangGraph workflow
-  lib/utils.ts                   Graph nodes and prompts
-  lib/datasource.config.ts       Config schema and env resolution
-  lib/datasource-health.ts       Health checks
-  lib/datasource/                Registry, service, adapters, types
-  lib/investigation/             Planner and result formatter
-  lib/mcp/                       MCP session, server config, response parsing
-  lib/prompt-guidelines.ts       Shared prompt safety and identifier rules
-  page.tsx                       Diagnostic workspace UI
+  config/datasources.json         Datasource definitions
+  lib/agent.ts                    Agent runtime and CLI workflow setup
+  lib/graph.ts                    LangGraph workflow
+  lib/utils.ts                    Graph nodes and state
+  lib/datasource.config.ts        Datasource config schema and env handling
+  lib/datasource-health.ts        Source health checks
+  lib/datasource/                 Registry, service, types, and adapters
+  lib/investigation/              Planner and report formatter
+  lib/mcp/                        MCP session, server config, response parsing
+  page.tsx                        Landing page and diagnostic workspace
+  components/                     Landing sections, workspace, and UI primitives
 
-deploy/
-  prometheus/                    Local Prometheus configuration
-  sentry/                        Local Sentry-compatible API server
-
-seed/
-  postgres/                      PostgreSQL schema and demo rows
-  prometheus/                    Prometheus demo metrics
-  sentry/                        Sentry demo organization, projects, and issues
-
-data/                            Demo SQLite databases
-docs/                            Usage and architecture documentation
+data/                             Local SQLite demo/runtime databases
+docs/                             Phase architecture and implementation notes
 tests/
   integration/                   Docker-backed integration tests and fixtures
   unit/                          Config, adapter, graph, prompt, and seed tests
 ```
 
-## Limitations
+## Current state and limitations
 
-- The local Sentry service is a Sentry-compatible mock, not a full self-hosted Sentry.
-- The local Compose stack is for development, not production.
-- The app does not include built-in authentication.
-- Query quality depends on the configured model and the quality of datasource metadata.
-- Prometheus discovery returns metric names, not full label metadata.
-- The default model is `google:gemini-3.5-flash-lite`; the registry currently exposes Google models.
-- Real integration tests require Docker, network access, and Gemini quota.
+- SQLite database and logs are enabled by default.
+- PostgreSQL and Prometheus are disabled by default and must be enabled with `ENABLE_POSTGRES=true` or `ENABLE_PROMETHEUS=true`.
+- The PostgreSQL MCP server exposes a read-only `query` tool; schema discovery is implemented with `information_schema`.
+- Prometheus health checks use HTTP status; they do not start the MCP server.
+- The root page is a marketing landing page plus a live diagnostic workspace backed by `GET /api/health` and `POST /api/diagnose`.
+- The real integration suite requires Docker, network access to pull images, and Gemini API quota.
+- The repository includes demo SQLite databases in `data/`; PostgreSQL demo data is seeded by the integration fixture SQL.
 
-## Documentation
+## Frontend dashboard
 
-- [Usage guide](docs/usage.md)
-- [Phase 1: MCP foundation](docs/phase-1-mcp-foundation.md)
-- [Phase 2: adapter architecture](docs/phase-2-adapter-architecture.md)
-- [Phase 3: graph refactor](docs/phase-3-graph-refactor.md)
-- [Phase 4: integrations](docs/phase-4-integrations.md)
-- [Phase 5: Sentry integration](docs/phase-5-sentry-integration.md)
+The root page (`app/page.tsx`) combines a landing page with the live diagnostic workspace:
+
+- A hero and capability sections explain what the agent does and link into the workspace.
+- A live source status section reads `GET /api/health` and shows enabled, up, down, and disabled adapters.
+- A workspace with an incident form, a model picker, and streamed investigation results.
+- Tabs for the investigation timeline, per-source evidence (query, status, latency, raw data), and the generated report.
+- Light, dark, and system themes via `next-themes`. UI primitives follow the shadcn pattern in `app/components/ui`.
+- `components.json` is configured for adding more shadcn components.
+
+The diagnose endpoint remains available at `POST /api/diagnose` and streams stages over SSE. The dashboard does not invoke a model until you run a diagnosis.
