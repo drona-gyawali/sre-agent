@@ -8,14 +8,18 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 POSTGRES_URL="postgresql://sre_agent:sre_agent@localhost:55433/sre_agent"
 PROMETHEUS_URL="http://localhost:19092"
 PUSHGATEWAY_URL="http://localhost:19093"
+SENTRY_URL="http://localhost:19095"
+SENTRY_AUTH_TOKEN="sntryu_local_dev"
+SENTRY_ORG="acme"
+SENTRY_PROJECT="payments"
 
 usage() {
   cat <<'EOF'
 Usage: ./service.sh [command]
 
 Commands:
-  up        Start PostgreSQL and Prometheus (default)
-  test      Start services and load demo data into PostgreSQL and Prometheus
+  up        Start PostgreSQL, Prometheus, and Sentry (default)
+  test      Start services and load demo data into PostgreSQL, Prometheus, and Sentry
   seed      Load demo data into already-running services
   status    Show container status
   logs      Follow container logs
@@ -30,6 +34,7 @@ Ports:
   PostgreSQL     localhost:55433
   Prometheus     localhost:19092
   Pushgateway    localhost:19093
+  Sentry         http://localhost:19095
 EOF
 }
 
@@ -40,6 +45,11 @@ POSTGRES_URL=${POSTGRES_URL}
 PROMETHEUS_URL=${PROMETHEUS_URL}
 ENABLE_POSTGRES=true
 ENABLE_PROMETHEUS=true
+SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN}
+SENTRY_ORG=${SENTRY_ORG}
+SENTRY_PROJECT=${SENTRY_PROJECT}
+SENTRY_HOST=${SENTRY_URL}
+ENABLE_SENTRY=true
 EOF
 }
 
@@ -53,7 +63,7 @@ write_env() {
     echo "Created .env from .env.example."
   fi
 
-  grep -vE '^(POSTGRES_URL|PROMETHEUS_URL|ENABLE_POSTGRES|ENABLE_PROMETHEUS)=' "$env_file" > "$tmp" || true
+  grep -vE '^(POSTGRES_URL|PROMETHEUS_URL|ENABLE_POSTGRES|ENABLE_PROMETHEUS|SENTRY_AUTH_TOKEN|SENTRY_ORG|SENTRY_PROJECT|SENTRY_HOST|ENABLE_SENTRY)=' "$env_file" > "$tmp" || true
   cat >> "$tmp" <<EOF
 
 # Local dev stack (updated by ./service.sh env --write)
@@ -61,11 +71,17 @@ POSTGRES_URL=${POSTGRES_URL}
 PROMETHEUS_URL=${PROMETHEUS_URL}
 ENABLE_POSTGRES=true
 ENABLE_PROMETHEUS=true
+SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN}
+SENTRY_ORG=${SENTRY_ORG}
+SENTRY_PROJECT=${SENTRY_PROJECT}
+SENTRY_HOST=${SENTRY_URL}
+ENABLE_SENTRY=true
 EOF
 
   cat "$tmp" > "$env_file"
   rm -f "$tmp"
   echo "Updated .env with the local dev stack values."
+  echo "Sentry now points at the local mock; replace those values with real credentials when needed."
   echo "Restart 'npm run dev' to apply the new environment."
 }
 
@@ -140,20 +156,30 @@ seed_prometheus() {
   echo "Pushed Prometheus demo metrics."
 }
 
+seed_sentry() {
+  wait_for_url "Sentry" "${SENTRY_URL}/health"
+  curl -fsS -X POST -H "Authorization: Bearer ${SENTRY_AUTH_TOKEN}" \
+    "${SENTRY_URL}/seed" >/dev/null
+  echo "Seeded Sentry (acme/payments, PAY-1, PAY-2, CHK-1)."
+}
+
 up() {
   compose up -d
   wait_for_postgres
   wait_for_url "Prometheus" "${PROMETHEUS_URL}/-/ready"
   wait_for_url "Pushgateway" "${PUSHGATEWAY_URL}/-/healthy"
+  wait_for_url "Sentry" "${SENTRY_URL}/health"
   echo
   echo "PostgreSQL:  ${POSTGRES_URL}"
   echo "Prometheus:  ${PROMETHEUS_URL}"
+  echo "Sentry:      ${SENTRY_URL}"
   echo "Run './service.sh env --write' to update .env, then restart 'npm run dev'."
 }
 
 seed_all() {
   seed_postgres
   seed_prometheus
+  seed_sentry
 }
 
 case "${1:-up}" in

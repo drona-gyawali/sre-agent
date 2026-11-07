@@ -219,6 +219,7 @@ describe("generate_report node", () => {
     expect(prompt).toContain('Evidence: [{"customer_id":"C-1001"');
     expect(prompt).toContain("## Evidence Gaps");
     expect(prompt).toContain("Absence of evidence is not proof");
+    expect(prompt).toContain("label mismatches");
     expect(prompt).toContain("untrusted evidence");
     expect(prompt).not.toContain("DB Records");
     expect(prompt).not.toContain("Logs:");

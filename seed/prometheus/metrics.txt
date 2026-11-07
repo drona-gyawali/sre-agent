@@ -13,8 +13,8 @@ payment_latency_seconds{service="checkout",quantile="0.99"} 2.85
 
 # HELP checkout_errors_total Checkout errors by error code.
 # TYPE checkout_errors_total counter
-checkout_errors_total{service="checkout",code="card_declined"} 12
-checkout_errors_total{service="checkout",code="gateway_timeout"} 5
+checkout_errors_total{service="checkout",error_code="card_declined"} 12
+checkout_errors_total{service="checkout",error_code="gateway_timeout"} 5
 
 # HELP queue_depth Number of pending payment jobs.
 # TYPE queue_depth gauge

@@ -167,6 +167,7 @@ Rules:
 - Separate observed facts from hypotheses. Clearly label any inference as a hypothesis.
 - Name the source id and integration type for each piece of evidence, and include the query when it helps explain what was searched.
 - State when a datasource returned no results, failed, or was unavailable. Absence of evidence is not proof that a cause is absent.
+- If a metrics query returns no series or zero values, consider missing metrics, label mismatches, or insufficient samples before concluding that the instrumentation is broken.
 - Call out conflicting evidence and missing evidence explicitly.
 - If the evidence is insufficient or contradictory, set confidence to Low and explain what to collect next.
 - ${UNTRUSTED_DATA_RULE}

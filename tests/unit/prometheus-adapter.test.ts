@@ -174,6 +174,10 @@ describe("PrometheusAdapter.query", () => {
 
     expect(prompt).toContain("Translate symptoms into signals");
     expect(prompt).toContain("never invent label names");
+    expect(prompt).toContain("query the counter directly");
+    expect(prompt).toContain(
+      "Grouping by an absent label silently returns no data"
+    );
     expect(prompt).toContain("Avoid high-cardinality labels");
     expect(prompt).toContain("untrusted evidence");
     expect(executeTool).toHaveBeenCalledTimes(2);

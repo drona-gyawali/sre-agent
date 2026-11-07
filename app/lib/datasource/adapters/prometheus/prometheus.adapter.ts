@@ -96,9 +96,10 @@ ${formatIdentifiersForPrompt(params)}
 Write one read-only PromQL query that surfaces the most diagnostic signal.
 Rules:
 - Use only metric names and labels that are known or strongly implied by the incident evidence.
-- Translate symptoms into signals: errors -> rate of failed requests or error counters; latency -> histogram_quantile or latency gauges; saturation -> utilization, queue depth, or resource limits; availability -> up or success ratio; restarts -> changes of process start time; traffic loss -> request rate versus baseline.
-- Use rate or increase for counters, avg or max for gauges, and sum by(...) for aggregation.
-- Use only plausible labels such as job, instance, service, status, error_code, environment, or region. If a label is uncertain, use a safe regex or omit it; never invent label names.
+- Translate symptoms into signals: errors -> failed-request rate or error counters; latency -> histogram_quantile or latency gauges; saturation -> utilization, queue depth, or resource limits; availability -> up or success ratio; restarts -> changes of process start time; traffic loss -> request rate versus baseline.
+- For current error counts or when you need to confirm non-zero activity, query the counter directly. Use rate or increase only when you need a trend and the metric is known to increase over time. Use avg or max for gauges and sum by(...) for aggregation.
+- Do not guess label names. Use a label only when it is known from the datasource metadata, visible in the metric name, or explicitly named in the incident. Common labels include job, instance, service, status, environment, and region. If a label is uncertain, aggregate without that label or omit the label filter; never invent label names.
+- Grouping by an absent label silently returns no data rather than an error. If you are unsure a label exists, do not put it in by (...).
 - Avoid high-cardinality labels such as customer IDs, user IDs, request IDs, or trace IDs.
 - If identifiers are sparse, choose the most relevant known metric broadly and compare current behavior with the surrounding window.
 - Do not include start time, end time, or step inside the PromQL query.

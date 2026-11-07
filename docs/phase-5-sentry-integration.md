@@ -136,6 +136,18 @@ During a diagnosis, the Sentry source:
 
 `GET /api/health` reports Sentry as `up`, `down`, or `disabled` alongside the other sources.
 
+### Local dev stack
+
+`./service.sh test` starts a local Sentry-compatible service on `http://localhost:19095` and loads the demo data from `seed/sentry/data.json`. The service is implemented by `deploy/sentry/sentry-mock-server.mjs` and supports the organization, project, issue-search, health, and token-validation endpoints used by `@sentry/mcp-server`.
+
+Use the committed `.env.sentry` values, or run:
+
+```bash
+./service.sh env --write
+```
+
+The local service is intended for development and integration testing. For a live Sentry account, replace `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, and `SENTRY_HOST` with real values.
+
 ## Tests
 
 ### Unit tests
