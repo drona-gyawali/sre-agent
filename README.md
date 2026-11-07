@@ -2,6 +2,8 @@
 
 SRE Diagnostic Agent is a Next.js and LangGraph application for investigating production incidents by combining GitHub issue context, database records, logs, and metrics. It dynamically selects relevant data sources, generates read-only SQL and PromQL through an LLM, executes those queries through MCP adapters, and produces an evidence-backed diagnostic report.
 
+![SRE Diagnostic Agent landing page in light mode](docs/images/landing-light.png)
+
 ## Why this project exists
 
 Incident investigation usually requires jumping between multiple systems:
@@ -343,7 +345,8 @@ app/
   lib/datasource/                 Registry, service, types, and adapters
   lib/investigation/              Planner and report formatter
   lib/mcp/                        MCP session, server config, response parsing
-  page.tsx                        Diagnostic workspace UI
+  page.tsx                        Landing page and diagnostic workspace
+  components/                     Landing sections, workspace, and UI primitives
 
 data/                             Local SQLite demo/runtime databases
 docs/                             Phase architecture and implementation notes
@@ -359,17 +362,19 @@ tests/
 - PostgreSQL and Prometheus are disabled by default and must be enabled with `ENABLE_POSTGRES=true` or `ENABLE_PROMETHEUS=true`.
 - The PostgreSQL MCP server exposes a read-only `query` tool; schema discovery is implemented with `information_schema`.
 - Prometheus health checks use HTTP status; they do not start the MCP server.
-- The root dashboard is a non-AI SRE operational page backed by `GET /api/health`. It shows datasource health and does not include an AI model picker or streaming UI.
+- The root page is a marketing landing page plus a live diagnostic workspace backed by `GET /api/health` and `POST /api/diagnose`.
 - The real integration suite requires Docker, network access to pull images, and Gemini API quota.
 - The repository includes demo SQLite databases in `data/`; PostgreSQL demo data is seeded by the integration fixture SQL.
 
 ## Frontend dashboard
 
-The root page (`app/page.tsx`) is a clean, non-AI SRE operational dashboard. It polls `GET /api/health` and renders:
+The root page (`app/page.tsx`) combines a landing page with the live diagnostic workspace:
 
-- Summary cards: total sources, enabled, up, down, and disabled counts.
-- A datasource table with name, ID, type, category, enabled status, health status, detail, and latency.
-- Color-coded status chips for `up`, `down`, and `disabled`.
-- Actions: refresh health, open documentation, and run diagnosis.
+- A hero and capability sections explain what the agent does and link into the workspace.
+- A live source status section reads `GET /api/health` and shows enabled, up, down, and disabled adapters.
+- A workspace with an incident form, a model picker, and streamed investigation results.
+- Tabs for the investigation timeline, per-source evidence (query, status, latency, raw data), and the generated report.
+- Light, dark, and system themes via `next-themes`. UI primitives follow the shadcn pattern in `app/components/ui`.
+- `components.json` is configured for adding more shadcn components.
 
-There is no Next.js favicon branding, AI model picker, or streaming UI on the dashboard. The diagnose endpoint remains available at `POST /api/diagnose` for the agent workflow.
+The diagnose endpoint remains available at `POST /api/diagnose` and streams stages over SSE. The dashboard does not invoke a model until you run a diagnosis.
