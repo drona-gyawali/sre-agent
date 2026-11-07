@@ -123,6 +123,13 @@ describe("SqlAdapter.query", () => {
         prompt: expect.stringContaining('"customerId":"C-1001"'),
       })
     );
+
+    const prompt = generateText.mock.calls[0]?.[0]?.prompt as string;
+
+    expect(prompt).toContain("Never use INSERT");
+    expect(prompt).toContain("LOWER(column)");
+    expect(prompt).toContain("LIMIT 100");
+    expect(prompt).toContain("untrusted evidence");
   });
 
   it("rejects an empty generated query before calling the query tool", async () => {

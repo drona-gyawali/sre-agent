@@ -9,6 +9,7 @@ This guide walks through starting PostgreSQL and Prometheus, loading demo data, 
 - `curl`
 - A GitHub personal access token with access to the repository containing the issue
 - A Google Generative AI API key
+- Optional: a Sentry auth token and organization slug if you want Sentry error evidence
 
 ```bash
 npm install
@@ -59,6 +60,27 @@ ENABLE_PROMETHEUS=true
 Restart `npm run dev` after changing `.env` — the app reads datasource configuration at startup.
 
 If you leave `ENABLE_POSTGRES` or `ENABLE_PROMETHEUS` as `false`, that source appears as `Disabled` in the UI health panel and is skipped during investigations.
+
+### Optional: enable Sentry
+
+Add your Sentry credentials to `.env` and enable the source:
+
+```bash
+SENTRY_AUTH_TOKEN=sntryu_...
+SENTRY_ORG=my-org
+SENTRY_PROJECT=checkout
+SENTRY_HOST=https://sentry.io
+ENABLE_SENTRY=true
+```
+
+- `SENTRY_ORG` is required when Sentry is enabled.
+- `SENTRY_PROJECT` is optional; leave it empty to search every project in the organization.
+- `SENTRY_HOST` defaults to `https://sentry.io`. For self-hosted Sentry, use the base URL of your instance.
+- Restart `npm run dev` after changing `.env`.
+
+The Sentry adapter discovers project slugs with `find_projects`, asks the model to build a Sentry issue search query from the incident identifiers, and executes `search_issues` through `@sentry/mcp-server`. The Sentry source reports `error_tracking` evidence to the report generator. See [phase-5-sentry-integration.md](phase-5-sentry-integration.md) for implementation details.
+
+The real integration suite does not need a Sentry account: it starts a mock Sentry API container and runs the real Sentry MCP server against it.
 
 ## 3. Create a GitHub issue and paste the incident
 
@@ -184,9 +206,9 @@ Change the host ports in `docker-compose.yml` and update `POSTGRES_URL`/`PROMETH
 ./service.sh reset
 ```
 
-**PostgreSQL or Prometheus shows `Disabled`**
+**PostgreSQL, Prometheus, or Sentry shows `Disabled`**
 
-Set `ENABLE_POSTGRES=true` and/or `ENABLE_PROMETHEUS=true` in `.env`, then restart `npm run dev`.
+Set `ENABLE_POSTGRES=true`, `ENABLE_PROMETHEUS=true`, and/or `ENABLE_SENTRY=true` in `.env`, then restart `npm run dev`.
 
 **Health endpoint returns 503**
 

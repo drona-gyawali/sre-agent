@@ -13,6 +13,7 @@ import {
 import type { McpToolResult, ToolExecutor } from "@/app/lib/mcp/mcp.interface";
 import type { RegistryModelId } from "@/app/lib/model.registry";
 import {
+  createExtractIdentifiersNode,
   createGenerateReportNode,
   createInvestigateSourcesNode,
   type DiagnosticStateValue,
@@ -129,6 +130,33 @@ beforeEach(() => {
   generateText.mockReset();
 });
 
+describe("extract_identifiers node", () => {
+  it("keeps multiple values and drops nested or secret-like objects", async () => {
+    generateText.mockResolvedValue({
+      text: JSON.stringify({
+        customerId: "C-1001",
+        traceId: ["trace-1", "trace-1", "trace-2"],
+        metadata: { token: "secret" },
+      }),
+    });
+
+    const node = createExtractIdentifiersNode();
+    const update = await node(state());
+
+    expect(update).toEqual({
+      identifiers: {
+        customerId: "C-1001",
+        traceId: "trace-1, trace-2",
+      },
+    });
+
+    const prompt = generateText.mock.calls[0]?.[0]?.prompt as string;
+
+    expect(prompt).toContain("traceId");
+    expect(prompt).toContain("untrusted evidence");
+  });
+});
+
 describe("investigate_sources node", () => {
   it("plans a source subset and investigates only the selected sources", async () => {
     const dataSourceService = fakeService({ logs: failedResult });
@@ -149,7 +177,8 @@ describe("investigate_sources node", () => {
     });
     expect(dataSourceService.investigate).toHaveBeenCalledWith(
       [sources.logs],
-      { customerId: "C-1001" }
+      { customerId: "C-1001" },
+      "Payments failed for C-1001"
     );
     expect(update).toEqual({
       sourceResults: {
@@ -188,6 +217,9 @@ describe("generate_report node", () => {
     expect(prompt).toContain("Status: failed (8ms)");
     expect(prompt).toContain("Error: logs MCP server is unavailable");
     expect(prompt).toContain('Evidence: [{"customer_id":"C-1001"');
+    expect(prompt).toContain("## Evidence Gaps");
+    expect(prompt).toContain("Absence of evidence is not proof");
+    expect(prompt).toContain("untrusted evidence");
     expect(prompt).not.toContain("DB Records");
     expect(prompt).not.toContain("Logs:");
   });
@@ -267,13 +299,14 @@ describe("buildDiagnosticGraph", () => {
     expect(result.report).toBe("Final diagnostic report");
     expect(dataSourceService.investigate).toHaveBeenCalledWith(
       [sources.logs],
-      { customerId: "C-1001" }
+      { customerId: "C-1001" },
+      "Payments are failing for customer C-1001"
     );
   });
 });
 
 describe("buildDiagnosticGraph with new integrations", () => {
-  it("keeps the same graph nodes for PostgreSQL and Prometheus sources", async () => {
+  it("keeps the same graph nodes for PostgreSQL, Prometheus, and Sentry sources", async () => {
     const integratedSources: DataSourceMap = {
       postgres: {
         id: "postgres",
@@ -298,6 +331,24 @@ describe("buildDiagnosticGraph with new integrations", () => {
         settings: { timeRangeMinutes: 15, stepSeconds: 30 },
         enabled: true,
       },
+      sentry: {
+        id: "sentry",
+        name: "sentry errors",
+        type: "sentry",
+        category: "error_tracking",
+        package: "@sentry/mcp-server",
+        tools: {
+          query: "sentry_search_issues",
+          discover: "sentry_find_projects",
+        },
+        env: {
+          SENTRY_AUTH_TOKEN: "sntryu_test",
+          SENTRY_ORG: "acme",
+          SENTRY_HOST: "https://sentry.example.com",
+        },
+        settings: { timeRangeMinutes: 60, stepSeconds: 60 },
+        enabled: true,
+      },
     };
 
     const graph = buildDiagnosticGraph({
@@ -319,5 +370,6 @@ describe("buildDiagnosticGraph with new integrations", () => {
     );
     expect(nodeIds).not.toContain("query_postgres");
     expect(nodeIds).not.toContain("query_prometheus");
+    expect(nodeIds).not.toContain("query_sentry");
   });
 });

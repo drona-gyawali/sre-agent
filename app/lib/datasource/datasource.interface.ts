@@ -10,6 +10,7 @@ import type {
 export interface QueryInput {
   readonly source: DataSourceConfig;
   readonly params: Readonly<Record<string, unknown>>;
+  readonly issueDescription?: string;
   readonly model: RegistryModelId;
 }
 

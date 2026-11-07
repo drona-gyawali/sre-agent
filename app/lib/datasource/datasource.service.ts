@@ -132,7 +132,8 @@ export class DataSourceService {
 
   private executeQuery(
     source: DataSourceConfig,
-    params: Readonly<Record<string, unknown>>
+    params: Readonly<Record<string, unknown>>,
+    issueDescription?: string
   ): Promise<AdapterQueryResult> {
     const adapter = this.resolveAdapter(source);
 
@@ -140,6 +141,7 @@ export class DataSourceService {
       {
         source,
         params,
+        issueDescription,
         model: this.model,
       },
       this.executeTool
@@ -152,24 +154,26 @@ export class DataSourceService {
 
   async query(
     source: DataSourceConfig,
-    params: Readonly<Record<string, unknown>>
+    params: Readonly<Record<string, unknown>>,
+    issueDescription?: string
   ): Promise<SourceResult> {
     this.requireEnabled(source);
     const startedAt = performance.now();
-    const result = await this.executeQuery(source, params);
+    const result = await this.executeQuery(source, params, issueDescription);
 
     return buildSuccessResult(source, result, elapsedSince(startedAt));
   }
 
   async investigateSource(
     source: DataSourceConfig,
-    params: Readonly<Record<string, unknown>>
+    params: Readonly<Record<string, unknown>>,
+    issueDescription?: string
   ): Promise<SourceResult> {
     const startedAt = performance.now();
 
     try {
       this.requireEnabled(source);
-      const result = await this.executeQuery(source, params);
+      const result = await this.executeQuery(source, params, issueDescription);
 
       return buildSuccessResult(source, result, elapsedSince(startedAt));
     } catch (error) {
@@ -179,7 +183,8 @@ export class DataSourceService {
 
   async investigate(
     sources: DataSourceMap | readonly DataSourceConfig[],
-    params: Readonly<Record<string, unknown>>
+    params: Readonly<Record<string, unknown>>,
+    issueDescription?: string
   ): Promise<Record<string, SourceResult>> {
     const configured = Array.isArray(sources)
       ? sources
@@ -188,7 +193,7 @@ export class DataSourceService {
     const results = await mapWithConcurrency(
       enabled,
       this.concurrency,
-      (source) => this.investigateSource(source, params)
+      (source) => this.investigateSource(source, params, issueDescription)
     );
 
     return Object.fromEntries(

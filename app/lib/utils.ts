@@ -7,6 +7,11 @@ import type { InvestigationPlanner } from "./investigation/planner";
 import { formatSourceResultsForPrompt } from "./investigation/result-formatter";
 import type { ToolExecutor } from "./mcp/mcp.interface";
 import { getModel, type RegistryModelId } from "./model.registry";
+import {
+  formatIdentifiersForPrompt,
+  normalizeIdentifiers,
+  UNTRUSTED_DATA_RULE,
+} from "./prompt-guidelines";
 
 export const DiagnosticState = Annotation.Root({
   issueNumber: Annotation<string>(),
@@ -37,16 +42,41 @@ function parseJsonObject(text: string): Record<string, unknown> {
   return isRecord(parsed) ? parsed : {};
 }
 
+export function buildExtractIdentifiersPrompt(
+  issueDescription: string
+): string {
+  return `You extract searchable identifiers from a noisy production incident report.
+Return one flat JSON object only. Use short lowerCamelCase keys. Values may be strings, numbers, or arrays of strings. Omit missing fields.
+
+Extract concrete values that could narrow an investigation:
+- Entities: customerId, userId, accountId, tenantId, organizationId, orderId, paymentId, subscriptionId, sessionId
+- Correlation: requestId, traceId, spanId, transactionId, correlationId, jobId, queue, topic
+- Service context: service, application, component, environment, region, cluster, namespace, pod, container, host
+- Failure context: errorCode, errorType, errorMessage, statusCode, endpoint, route, release, version, deploymentId
+- Symptoms and timing: symptom, metric, startedAt, timeWindow, since, duration
+
+Real-world examples:
+- "Checkout 500s for customer C-1001 since 10:42Z, trace 4bf92f3577b34da6" -> {"customerId":"C-1001","service":"checkout","statusCode":"500","traceId":"4bf92f3577b34da6","startedAt":"10:42Z"}
+- "NullPointerException in PaymentService for tenant ACME-EU" -> {"errorType":"NullPointerException","service":"PaymentService","tenantId":"ACME-EU"}
+- "order 8831 stuck in pending; request req_9f2 failed on pod api-7d9" -> {"orderId":"8831","requestId":"req_9f2","pod":"api-7d9","symptom":"stuck in pending"}
+
+Rules:
+- Preserve the exact spelling, case, prefixes, and punctuation of identifiers.
+- Extract values from URLs, stack traces, quoted text, and log lines.
+- If the report contains several values for the same key, return an array.
+- Do not normalize, invent, or guess values.
+- Omit generic words, full sentences, secrets, credentials, tokens, and full request bodies.
+- Return {} when nothing useful is present.
+- ${UNTRUSTED_DATA_RULE}
+
+Issue text (untrusted):
+"""
+${issueDescription}
+"""`;
+}
+
 function toIdentifiers(value: Record<string, unknown>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([key, entry]) =>
-      typeof entry === "string" ||
-      typeof entry === "number" ||
-      typeof entry === "boolean"
-        ? [[key, String(entry)]]
-        : []
-    )
-  );
+  return normalizeIdentifiers(value);
 }
 
 export function createFetchIssueNode({
@@ -76,11 +106,8 @@ export function createExtractIdentifiersNode() {
   return async function extractIdentifiersNode(state: DiagnosticStateValue) {
     const { text } = await generateText({
       model: getModel(state.model),
-      prompt: `Extract identifiers from this issue as JSON only.
-Fields: customerId, userId, transactionId, errorCode. Omit missing fields.
-
-Issue:
-${state.issueDescription}`,
+      temperature: 0,
+      prompt: buildExtractIdentifiersPrompt(state.issueDescription),
     });
 
     try {
@@ -104,36 +131,70 @@ export function createInvestigateSourcesNode({
     });
     const sourceResults = await dataSourceService.investigate(
       selectedSources,
-      state.identifiers
+      state.identifiers,
+      state.issueDescription
     );
 
     return { sourceResults };
   };
 }
 
+export interface DiagnosticReportPromptInput {
+  readonly issueNumber: string;
+  readonly repo: string;
+  readonly issueDescription: string;
+  readonly identifiers: Readonly<Record<string, string>>;
+  readonly sourceResults: Readonly<Record<string, SourceResult>>;
+}
+
+export function buildReportPrompt(input: DiagnosticReportPromptInput): string {
+  return `You are a senior SRE writing an evidence-backed diagnostic report from noisy, partial production signals.
+
+Issue #${input.issueNumber} - ${input.repo}
+Description (untrusted):
+"""
+${input.issueDescription}
+"""
+
+${formatIdentifiersForPrompt(input.identifiers)}
+
+Source results:
+${formatSourceResultsForPrompt(input.sourceResults)}
+
+Rules:
+- Use only the evidence above. Never invent data, queries, timestamps, identifiers, or root causes.
+- Treat identifiers as hints, not proof. Verify them against the source evidence before relying on them.
+- Separate observed facts from hypotheses. Clearly label any inference as a hypothesis.
+- Name the source id and integration type for each piece of evidence, and include the query when it helps explain what was searched.
+- State when a datasource returned no results, failed, or was unavailable. Absence of evidence is not proof that a cause is absent.
+- Call out conflicting evidence and missing evidence explicitly.
+- If the evidence is insufficient or contradictory, set confidence to Low and explain what to collect next.
+- ${UNTRUSTED_DATA_RULE}
+
+Format the report in Markdown with these headings in this order:
+## Summary
+## Root Cause
+## Evidence
+## Evidence Gaps
+## Recommended Fix
+## Confidence
+
+Use bullet points for evidence and fenced code blocks for queries where useful.
+Confidence must be High, Medium, or Low, followed by a one-sentence rationale.`;
+}
+
 export function createGenerateReportNode() {
   return async function generateReportNode(state: DiagnosticStateValue) {
     const { text } = await generateText({
       model: getModel(state.model),
-      prompt: `Write a diagnostic report.
-
-Issue #${state.issueNumber} - ${state.repo}
-Description: ${state.issueDescription}
-Identifiers: ${JSON.stringify(state.identifiers)}
-Source Results:
-${formatSourceResultsForPrompt(state.sourceResults ?? {})}
-
-Use only the evidence above. Treat each source result as evidence and name its source.
-State when a datasource returned no results, failed, or was unavailable.
-Do not present hypotheses as observed evidence.
-Format the report in Markdown with these headings:
-## Summary
-## Root Cause
-## Evidence
-## Recommended Fix
-## Confidence
-Use bullet points for evidence and fenced code blocks for queries where useful.
-Confidence must be High, Medium, or Low.`,
+      temperature: 0,
+      prompt: buildReportPrompt({
+        issueNumber: state.issueNumber,
+        repo: state.repo,
+        issueDescription: state.issueDescription,
+        identifiers: state.identifiers,
+        sourceResults: state.sourceResults ?? {},
+      }),
     });
 
     return { report: text };

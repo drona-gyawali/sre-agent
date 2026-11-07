@@ -102,6 +102,7 @@ describe("loadDataSources", () => {
       "logs",
       "postgres",
       "metrics",
+      "sentry",
     ]);
     expect(sources.database?.type).toBe("sqlite");
     expect(sources.database?.category).toBe("database");
@@ -135,6 +136,59 @@ describe("loadDataSources", () => {
     expect(sources.metrics?.env.PROMETHEUS_URL).toBe(
       "http://prometheus.example:9090"
     );
+    expect(sources.sentry).toMatchObject({
+      type: "sentry",
+      category: "error_tracking",
+      enabled: false,
+      env: {},
+    });
+  });
+
+  it("enables Sentry from environment values", () => {
+    const sources = parseDataSources(rawDataSources, {
+      env: {
+        ENABLE_DATABASE: "false",
+        ENABLE_LOGS: "false",
+        ENABLE_SENTRY: "true",
+        SENTRY_AUTH_TOKEN: "sntryu_test",
+        SENTRY_ORG: "acme",
+        SENTRY_PROJECT: "payments",
+        SENTRY_HOST: "https://sentry.example.com",
+      },
+      validateConnections: false,
+    });
+
+    expect(sources.sentry).toMatchObject({
+      type: "sentry",
+      category: "error_tracking",
+      enabled: true,
+      tools: {
+        query: "sentry_search_issues",
+        discover: "sentry_find_projects",
+      },
+      env: {
+        SENTRY_AUTH_TOKEN: "sntryu_test",
+        SENTRY_ORG: "acme",
+        SENTRY_PROJECT: "payments",
+        SENTRY_HOST: "https://sentry.example.com",
+      },
+    });
+    expect(sources.sentry?.connection).toBeUndefined();
+  });
+
+  it("requires Sentry credentials when enabled", () => {
+    expect(() =>
+      parseDataSources(rawDataSources, {
+        env: {
+          ENABLE_DATABASE: "false",
+          ENABLE_LOGS: "false",
+          ENABLE_SENTRY: "true",
+          SENTRY_AUTH_TOKEN: "",
+          SENTRY_ORG: "",
+        },
+        validateConnections: false,
+      })
+    ).toThrowError(/requires SENTRY_AUTH_TOKEN/);
   });
 
   it("requires datasource environment values instead of config defaults", () => {

@@ -235,6 +235,16 @@ export function parseDataSources(
         )
       : {};
 
+    if (enabled && source.type === "sentry") {
+      for (const key of ["SENTRY_AUTH_TOKEN", "SENTRY_ORG"]) {
+        if (!resolvedEnv[key]?.trim()) {
+          throw new DataSourceConfigError(
+            `Datasource "${id}" requires ${key}`
+          );
+        }
+      }
+    }
+
     sources[id] = {
       id,
       name: source.name,

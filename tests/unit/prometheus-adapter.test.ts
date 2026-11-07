@@ -169,6 +169,13 @@ describe("PrometheusAdapter.query", () => {
         prompt: expect.stringContaining('"service":"api"'),
       })
     );
+
+    const prompt = generateText.mock.calls[0]?.[0]?.prompt as string;
+
+    expect(prompt).toContain("Translate symptoms into signals");
+    expect(prompt).toContain("never invent label names");
+    expect(prompt).toContain("Avoid high-cardinality labels");
+    expect(prompt).toContain("untrusted evidence");
     expect(executeTool).toHaveBeenCalledTimes(2);
   });
 

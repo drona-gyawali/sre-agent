@@ -22,6 +22,8 @@ const composeFile = fileURLToPath(
 const postgresUrl = "postgresql://sre_agent:sre_agent@localhost:55432/sre_agent";
 const prometheusUrl = "http://localhost:19090";
 const pushgatewayUrl = "http://localhost:19091";
+const sentryUrl = "http://localhost:19094";
+const sentryAuthToken = "sntryu_integration";
 const model = (process.env.INTEGRATION_MODEL ??
   "google:gemini-3.5-flash-lite") as RegistryModelId;
 
@@ -54,9 +56,30 @@ const prometheusSource: DataSourceConfig = {
   enabled: true,
 };
 
+const sentrySource: DataSourceConfig = {
+  id: "sentry",
+  name: "sentry",
+  type: "sentry",
+  category: "error_tracking",
+  package: "@sentry/mcp-server",
+  tools: {
+    query: "sentry_search_issues",
+    discover: "sentry_find_projects",
+  },
+  env: {
+    SENTRY_AUTH_TOKEN: sentryAuthToken,
+    SENTRY_ORG: "acme",
+    SENTRY_PROJECT: "payments",
+    SENTRY_HOST: sentryUrl,
+  },
+  settings: { timeRangeMinutes: 60, stepSeconds: 60 },
+  enabled: true,
+};
+
 const sources: DataSourceMap = {
   postgres: postgresSource,
   metrics: prometheusSource,
+  sentry: sentrySource,
 };
 
 let session: McpSession | undefined;
@@ -152,7 +175,7 @@ function toolResult(text: string, toolName = "get_issue"): McpToolResult {
 }
 
 describe.skipIf(!runRealIntegration)(
-  "Real PostgreSQL and Prometheus integration",
+  "Real PostgreSQL, Prometheus, and Sentry integration",
   () => {
     beforeAll(async () => {
       loadLocalEnvironment();
@@ -189,7 +212,7 @@ describe.skipIf(!runRealIntegration)(
       compose(["down", "-v", "--remove-orphans"]);
     });
 
-    it("connects to the real PostgreSQL and Prometheus MCP servers", () => {
+    it("connects to the real PostgreSQL, Prometheus, and Sentry MCP servers", () => {
       const toolNames = requireSession().tools.map((tool) => tool.name);
 
       expect(toolNames).toEqual(
@@ -198,6 +221,8 @@ describe.skipIf(!runRealIntegration)(
           "metrics_prom_query",
           "metrics_prom_range",
           "metrics_prom_discover",
+          "sentry_search_issues",
+          "sentry_find_projects",
         ])
       );
     });
@@ -238,10 +263,22 @@ describe.skipIf(!runRealIntegration)(
       );
     }, 60_000);
 
-    it("reports real PostgreSQL and Prometheus health", async () => {
+    it("discovers real Sentry projects through the MCP server", async () => {
+      const discovery = await requireService().discover(sentrySource);
+
+      expect(discovery).toMatchObject({
+        sourceId: "sentry",
+        integrationType: "sentry",
+        category: "error_tracking",
+      });
+      expect(discovery.projects).toEqual(["payments"]);
+    }, 60_000);
+
+    it("reports real PostgreSQL, Prometheus, and Sentry health", async () => {
       const report = await checkDataSourcesHealth({
         postgres: postgresSource,
         metrics: prometheusSource,
+        sentry: sentrySource,
       });
 
       expect(report.status).toBe("ok");
@@ -253,6 +290,11 @@ describe.skipIf(!runRealIntegration)(
         }),
         expect.objectContaining({
           id: "metrics",
+          enabled: true,
+          status: "up",
+        }),
+        expect.objectContaining({
+          id: "sentry",
           enabled: true,
           status: "up",
         }),
@@ -297,6 +339,31 @@ describe.skipIf(!runRealIntegration)(
       expect(result.query).toContain("sre_agent_http_requests_total");
       expect(data.status).toBe("success");
       expect(data.data?.result?.length).toBeGreaterThan(0);
+    });
+
+    it("generates and executes a real Sentry issue search with Gemini", { retry: 2, timeout: 120_000 }, async () => {
+      const result = await requireService().query(sentrySource, {
+        customerId: "C-1001",
+        errorCode: "card_declined",
+        service: "checkout",
+      });
+      const data = result.data as {
+        query?: string;
+        issues?: Array<{ shortId?: string; title?: string }>;
+      };
+
+      expect(result).toMatchObject({
+        sourceId: "sentry",
+        integrationType: "sentry",
+        category: "error_tracking",
+        status: "success",
+      });
+      expect(result.query?.trim().length).toBeGreaterThan(0);
+      expect(data.issues?.length).toBeGreaterThan(0);
+      expect(data.issues?.[0]).toMatchObject({
+        shortId: "PAY-1",
+        title: expect.stringContaining("C-1001"),
+      });
     });
 
     it("runs the diagnostic graph end to end with real datasources", { retry: 3, timeout: 240_000 }, async () => {

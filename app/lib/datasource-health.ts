@@ -127,6 +127,33 @@ async function checkSource(
           `Prometheus health endpoint returned HTTP ${response.status}`
         );
       }
+    } else if (source.type === "sentry") {
+      const baseUrl = source.env.SENTRY_HOST?.trim() || "https://sentry.io";
+      const token = source.env.SENTRY_AUTH_TOKEN?.trim();
+      const organizationSlug = source.env.SENTRY_ORG?.trim();
+
+      if (!token) {
+        throw new Error("SENTRY_AUTH_TOKEN is not configured");
+      }
+
+      if (!organizationSlug) {
+        throw new Error("SENTRY_ORG is not configured");
+      }
+
+      const healthUrl = new URL(
+        `api/0/organizations/${encodeURIComponent(organizationSlug)}/`,
+        baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`
+      );
+      const fetchImpl = dependencies.fetch ?? fetch;
+      const response = await fetchImpl(healthUrl, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(DEFAULT_HEALTH_TIMEOUT_MS),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Sentry API returned HTTP ${response.status}`);
+      }
     }
 
     return {
